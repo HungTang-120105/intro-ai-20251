@@ -36,6 +36,13 @@ class FibonacciHeap:
     if self.least is None:
       return None
     return self.least.value
+  
+  def __len__(self):
+    return self.count
+  def __sizeof__(self):
+    return self.count
+  def size(self):
+    return self.count
 
   def pop(self):
     smallest = self.least
