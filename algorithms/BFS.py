@@ -1,5 +1,6 @@
 from collections import deque
 import networkx as nx
+from vis.tracer import get_tracer
 from typing import List, Optional, Tuple, Any
 
 def bfs(
@@ -32,9 +33,15 @@ def bfs(
     q: deque[Any] = deque([source])
     parent: dict[Any, Optional[Any]] = {source: None}
     visit_order: List[Any] = []  # order of nodes as they are popped/processed
-
+    depth: dict[Any, int] = {source: 0}
+    tr = get_tracer()
     while q:
         u = q.popleft()
+        tr.emit("BFS", "expand", {
+            "current": u,
+            "depth": depth[u],
+            "parent_map": dict(parent),
+        })
         visit_order.append(u)
 
         if u == target:
@@ -67,12 +74,27 @@ def bfs(
                     except Exception:
                         total_weight += 1.0
 
+            tr.emit("BFS", "goal", {
+                "path": path,
+                "length": len(path),
+                "total_weight": total_weight,
+                "parent_map": dict(parent),
+            })
+
             return path, total_weight, visit_order
 
         for v in G.neighbors(u):
             if v not in parent:
                 parent[v] = u
+                depth[v] = depth[u] + 1
                 q.append(v)
+                tr.emit("BFS", "frontier", {
+                    "parent": u,
+                    "child": v,
+                    "frontier": list(q),
+                    "parent_map": dict(parent),
+                })
+
 
     return None
 

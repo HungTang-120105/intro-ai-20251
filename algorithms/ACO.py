@@ -1,5 +1,6 @@
 import networkx as nx
 from typing import Any, List, Optional, Tuple
+from vis.tracer import get_tracer
 import random
 
 def aco(G : nx.Graph, source: any, target: any, 
@@ -11,6 +12,7 @@ def aco(G : nx.Graph, source: any, target: any,
   best_length = float('inf')
 
   for iteration in range(max_iterations):
+    tr = get_tracer()
     successful_paths = []
 
     for ant in range(num_ants):
@@ -33,8 +35,13 @@ def aco(G : nx.Graph, source: any, target: any,
         total = sum(probabilities)
         probabilities = [p / total for p in probabilities]
         next_node = random.choices(allowed_nodes, weights=probabilities)[0]
-
         current_path.append(next_node)
+
+        tr.emit("ACO", "construct", {
+          "path" : current_path,
+          "iteration": iteration,
+        })
+
         visited.add(next_node)
         current_node = next_node
 
@@ -43,6 +50,11 @@ def aco(G : nx.Graph, source: any, target: any,
     
     for u, v in G.edges():
       G[u][v]['pheromone'] *= (1 - evaporation_rate)
+    evaporate_snapshot = { (u, v): G[u][v]['pheromone'] for u, v in G.edges() }
+    tr.emit("ACO", "evaporate", {
+      "iteration": iteration,
+      "evaporate" : evaporate_snapshot
+    })
     
     for path in successful_paths:
       L = 0
@@ -57,6 +69,13 @@ def aco(G : nx.Graph, source: any, target: any,
       for i in range(len(path) - 1):
         u, v = path[i], path[i + 1]
         G[u][v]['pheromone'] += delta_tau
+    
+    tr.emit("ACO", "iteration", {
+      "iteration": iteration,
+      "best_path": best_path,
+      "best_length": best_length,
+      "successful_paths": successful_paths
+    })
 
   if best_path is not None:
     return best_path, int(best_length)

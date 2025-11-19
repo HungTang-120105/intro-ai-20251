@@ -1,7 +1,7 @@
 from collections import deque
 import networkx as nx
 from typing import Any, List, Optional, Tuple
-
+from vis.tracer import get_tracer
 
 def dfs(G: nx.Graph, source, target) -> Optional[Tuple[List[Any], float, List[Any]]]:
     """
@@ -21,8 +21,13 @@ def dfs(G: nx.Graph, source, target) -> Optional[Tuple[List[Any], float, List[An
     parent = {source: None}
     visit_order: List[Any] = []
 
+    tr = get_tracer()
     while q:
         u = q.pop()
+        tr.emit("DFS", "expand", {
+            "current": u,
+            "parent_map": dict(parent),
+        })
         visit_order.append(u)
 
         if u == target:
@@ -52,12 +57,25 @@ def dfs(G: nx.Graph, source, target) -> Optional[Tuple[List[Any], float, List[An
                         total_weight += float(w)
                     except Exception:
                         total_weight += 1.0
-
+            
+            tr.emit("DFS", "goal", {
+                "path": path,
+                "length": len(path),
+                "total_weight": total_weight,
+                "parent_map": dict(parent),
+            })
             return path, total_weight, visit_order
 
         for v in reversed(list(G.neighbors(u))):
             if v not in parent:
                 parent[v] = u
                 q.append(v)
+                tr.emit("DFS", "frontier", {
+                    "parent": u,
+                    "child": v,
+                    "frontier": list(q),
+                    "parent_map": dict(parent),
+                })
+
 
     return None

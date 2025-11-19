@@ -18,14 +18,22 @@ def ucs(
   tr = get_tracer()
   while not pq.empty():
     current_cost, u = pq.get()
-    tr.emit("UCS", "expand", {"current": u, "cost": visited})
+    tr.emit("UCS", "expand", {
+      "current": u,
+      "cost": current_cost,
+      "parent_map": dict(parent),
+    })
     if u == target:
       path = []
       while u is not None:
         path.append(u)
         u = parent[u]
       path.reverse()
-      tr.emit("UCS", "found", {"path": path, "cost": current_cost})
+      tr.emit("UCS", "goal", {
+        "path": path,
+        "cost": current_cost,
+        "parent_map": dict(parent),
+      })
       return path, current_cost
     
     if visited[u] != current_cost:
@@ -38,7 +46,11 @@ def ucs(
       if v not in visited or new_cost < visited[v]:
         visited[v] = new_cost
         parent[v] = u
-        tr.emit("UCS", "frontier", {"frontier": list(visited.keys())})
         pq.put((new_cost, v))
+        frontier_snapshot = [node for _c, node in pq.queue]
+        tr.emit("UCS", "frontier", {
+          "frontier": frontier_snapshot,
+          "parent_map": dict(parent),
+        })
 
   return None

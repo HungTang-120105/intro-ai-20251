@@ -2,6 +2,7 @@ import random
 import math
 from typing import Any, Dict, List, Optional, Tuple
 import networkx as nx
+from vis.tracer import get_tracer
 import math
 
 Route = List[Any]
@@ -170,6 +171,7 @@ class GAForGraph:
         history: List[float] = []
 
         for gen in range(1, generations + 1):
+            tr = get_tracer()
             # elitism: chọn top-k theo fitness
             sorted_idx = sorted(range(len(population)), key=lambda i: fitnesses[i], reverse=True)
             new_pop: List[Route] = []
@@ -218,6 +220,14 @@ class GAForGraph:
                 best_fitness = gen_best_fit
                 best_route = gen_best_route
                 best_cost = gen_best_cost
+
+            population_snapshot = [list(ind) for ind in population]
+            tr.emit("GA", "generation", {
+                "generation": gen, 
+                "best_route": gen_best_route, 
+                "best_cost": gen_best_cost, 
+                "population": population_snapshot
+            })
 
             history.append(best_cost)
 
