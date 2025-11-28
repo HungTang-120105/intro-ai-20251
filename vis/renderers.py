@@ -41,6 +41,7 @@ def playback_2d(
     interval: int = 200,
     stages: Sequence[str] = DEFAULT_STAGES,
     scatter_kwargs: Optional[Dict[str, float]] = None,
+    figsize: Tuple[float, float] = (9.0, 7.0),
 ):
   frames, best_points, best_values = [], [], []
 
@@ -63,7 +64,7 @@ def playback_2d(
 
   bounds = bounds or _auto_bounds(frames)
 
-  fig, ax = plt.subplots()
+  fig, ax = plt.subplots(figsize=figsize)
   ax.set_xlim(*bounds[0])
   ax.set_ylim(*bounds[1])
   ax.set_xlabel("x")

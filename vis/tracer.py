@@ -12,6 +12,7 @@ __all__ = [
     "Tracer",
     "Recorder",
     "DistinctRecorder",
+    "emit_path_state",
     "set_tracer",
     "get_tracer",
     "use_tracer",
@@ -63,7 +64,6 @@ def _positions_equal(lhs: Any, rhs: Any) -> bool:
     if a.shape == b.shape:
       return np.array_equal(a, b)
   except (TypeError, ValueError):
-    # Fallback to Python equality (covers lists/tuples)
     pass
   return lhs == rhs
 
@@ -129,6 +129,50 @@ def use_tracer(tracer: Tracer):
     yield tracer
   finally:
     set_tracer(prev)
+
+
+def _to_list(seq: Any) -> List[Any]:
+  if seq is None:
+    return []
+  if isinstance(seq, list):
+    return list(seq)
+  if isinstance(seq, (set, tuple)):
+    return list(seq)
+  try:
+    return list(seq)
+  except Exception:
+    return [seq]
+
+
+def emit_path_state(
+    tracer: Tracer,
+    algo: str,
+    stage: str,
+    current: Any = None,
+    frontier: Any = None,
+    explored: Any = None,
+    parent_map: Optional[Dict[Any, Any]] = None,
+    cost: Any = None,
+    path: Optional[Iterable[Any]] = None,
+    extra: Optional[Dict[str, Any]] = None,
+) -> None:
+
+  payload: Dict[str, Any] = {}
+  if current is not None:
+    payload["current"] = current
+  if frontier is not None:
+    payload["frontier"] = _to_list(frontier)
+  if explored is not None:
+    payload["explored"] = _to_list(explored)
+  if parent_map is not None:
+    payload["parent_map"] = dict(parent_map)
+  if cost is not None:
+    payload["cost"] = cost
+  if path is not None:
+    payload["path"] = list(path)
+  if extra:
+    payload.update(extra)
+  tracer.emit(algo, stage, payload)
 
 
 NullTracer = Tracer(enabled=False)
