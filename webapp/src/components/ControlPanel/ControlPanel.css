@@ -1,0 +1,48 @@
+.control-panel-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.control-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.play-btn {
+  width: 50px;
+  height: 50px;
+  font-size: 1.2rem;
+}
+
+.progress-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.progress-label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  text-align: center;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.speed-control {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.speed-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  display: flex;
+  justify-content: space-between;
+}
+
+.speed-value {
+  color: var(--accent-primary);
+  font-weight: 600;
+}

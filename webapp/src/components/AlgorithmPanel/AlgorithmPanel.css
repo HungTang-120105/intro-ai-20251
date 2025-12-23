@@ -1,0 +1,48 @@
+.algorithm-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.algorithm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.algorithm-color-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 8px;
+}
+
+.algorithm-card-meta {
+  margin-top: 8px;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.algorithm-optimal strong {
+  color: var(--text-secondary);
+}
+
+.btn-run-all {
+  margin-top: 12px;
+  width: 100%;
+}
+
+.btn-run-all:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.algorithm-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: 8px;
+}

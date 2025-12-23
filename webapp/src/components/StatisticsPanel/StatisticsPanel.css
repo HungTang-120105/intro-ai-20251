@@ -1,0 +1,146 @@
+.statistics-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.stats-empty {
+  text-align: center;
+  padding: 24px;
+  color: var(--text-muted);
+}
+
+.stats-hint {
+  font-size: 0.75rem;
+  margin-top: 8px;
+}
+
+.stats-table-container {
+  overflow-x: auto;
+}
+
+.stats-table {
+  width: 100%;
+  font-size: 0.8rem;
+  border-collapse: collapse;
+}
+
+.stats-table th {
+  padding: 8px 6px;
+  text-align: left;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.stats-table td {
+  padding: 10px 6px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.stats-table tr.no-path {
+  opacity: 0.5;
+}
+
+.algo-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.algo-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.stat-value {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-primary);
+}
+
+.stat-value.time {
+  color: var(--accent-primary);
+}
+
+.step-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mini-progress {
+  width: 40px;
+  height: 3px;
+  background: var(--bg-primary);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.mini-progress-fill {
+  height: 100%;
+  background: var(--accent-primary);
+  transition: width 0.2s ease;
+}
+
+.stats-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px;
+  background: var(--bg-card);
+  border-radius: var(--border-radius-sm);
+  font-size: 0.7rem;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-secondary);
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.best-result {
+  background: linear-gradient(135deg, rgba(0, 217, 255, 0.1), rgba(124, 58, 237, 0.1));
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--border-radius-sm);
+  padding: 12px;
+}
+
+.best-result-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent-primary);
+  margin-bottom: 8px;
+}
+
+.best-result-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.best-item {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+}
+
+.best-label {
+  color: var(--text-secondary);
+}
+
+.best-value {
+  color: var(--text-primary);
+  font-weight: 500;
+}
