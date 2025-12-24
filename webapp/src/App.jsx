@@ -259,8 +259,8 @@ function App() {
       return newGraph;
     });
 
-    setResults([]);
-    setCurrentSteps({});
+    // Don't clear results - allow editing while viewing parallel comparison
+    // User can re-run algorithms when ready
   }, [graph, nodeCounter]);
 
   // Add edge handler
@@ -281,8 +281,7 @@ function App() {
       return newGraph;
     });
 
-    setResults([]);
-    setCurrentSteps({});
+    // Don't clear results - allow editing while viewing parallel comparison
   }, [graph, isDirected]);
 
   // Delete node handler
@@ -304,8 +303,7 @@ function App() {
       return newGraph;
     });
 
-    setResults([]);
-    setCurrentSteps({});
+    // Don't clear results - allow editing while viewing parallel comparison
   }, [graph, source, target]);
 
   // Delete edge handler
@@ -320,8 +318,7 @@ function App() {
       return newGraph;
     });
 
-    setResults([]);
-    setCurrentSteps({});
+    // Don't clear results - allow editing while viewing parallel comparison
   }, [graph, isDirected]);
 
   // Clear graph handler
@@ -453,8 +450,13 @@ function App() {
                 source={source}
                 target={target}
                 isDirected={isDirected}
-                editorMode={'view'}
+                editorMode={editorMode}
+                onNodeClick={handleNodeClick}
                 onNodeDrag={handleNodeDrag}
+                onAddNode={handleAddNode}
+                onAddEdge={handleAddEdge}
+                onDeleteNode={handleDeleteNode}
+                onDeleteEdge={handleDeleteEdge}
                 showStreetGrid={showStreetGrid}
                 gridInfo={gridInfo}
                 hasCityMap={hasCityMap}
@@ -478,8 +480,13 @@ function App() {
                 source={source}
                 target={target}
                 isDirected={isDirected}
-                editorMode={'view'}
+                editorMode={editorMode}
+                onNodeClick={handleNodeClick}
                 onNodeDrag={handleNodeDrag}
+                onAddNode={handleAddNode}
+                onAddEdge={handleAddEdge}
+                onDeleteNode={handleDeleteNode}
+                onDeleteEdge={handleDeleteEdge}
                 showStreetGrid={showStreetGrid}
                 gridInfo={gridInfo}
                 hasCityMap={hasCityMap}
