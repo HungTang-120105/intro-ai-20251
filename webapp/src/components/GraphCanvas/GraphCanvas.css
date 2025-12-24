@@ -12,6 +12,7 @@
 .graph-canvas {
   cursor: pointer;
   border-radius: var(--border-radius-sm);
+  display: block;
 }
 
 .graph-canvas:hover {
@@ -58,4 +59,37 @@
     linear-gradient(90deg, rgba(51, 65, 85, 0.1) 1px, transparent 1px);
   background-size: 40px 40px;
   pointer-events: none;
+}
+
+.graph-type-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.graph-type-badge.directed {
+  background: rgba(245, 158, 11, 0.2);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.graph-type-badge.undirected {
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.graph-type-badge.city-map {
+  top: auto;
+  bottom: 12px;
+  right: 12px;
+  background: rgba(99, 102, 241, 0.2);
+  color: #6366f1;
+  border: 1px solid rgba(99, 102, 241, 0.3);
 }

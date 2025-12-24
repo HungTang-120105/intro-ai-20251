@@ -69,7 +69,9 @@ export function bellmanFord(graph, source, target) {
           newDistance: dist.get(v),
           distances: Object.fromEntries(dist),
           parent: Object.fromEntries(parent),
-          message: `Relaxed ${u}→${v} (w=${w}): d[${v}] = ${oldDist === Infinity ? '∞' : oldDist} → ${dist.get(v)}`,
+          message: oldDist === Infinity 
+            ? `Discovered ${v} from ${u} (distance: ${dist.get(v)})`
+            : `Updated ${v}: ${oldDist} → ${dist.get(v)} (via ${u})`,
         });
       }
 
@@ -94,7 +96,9 @@ export function bellmanFord(graph, source, target) {
           newDistance: dist.get(u),
           distances: Object.fromEntries(dist),
           parent: Object.fromEntries(parent),
-          message: `Relaxed ${v}→${u} (w=${w}): d[${u}] = ${oldDist === Infinity ? '∞' : oldDist} → ${dist.get(u)}`,
+          message: oldDist === Infinity 
+            ? `Discovered ${u} from ${v} (distance: ${dist.get(u)})`
+            : `Updated ${u}: ${oldDist} → ${dist.get(u)} (via ${v})`,
         });
       }
     }

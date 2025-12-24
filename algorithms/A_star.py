@@ -1,6 +1,13 @@
 from heapq import heappush, heappop
 from typing import List, Optional, Tuple, Any, Callable
 import networkx as nx
+import sys
+import os
+
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from vis.tracer import get_tracer
+
 
 def astar(
     G: nx.Graph,
@@ -29,18 +36,39 @@ def astar(
         cost : tổng chi phí đường đi.
         visited_order : thứ tự mở rộng node.
     """
+    if source not in G or target not in G:
+        return None
+    
     if heuristic is None:
         heuristic = lambda u, v: 0  # nếu không có heuristic thì trở thành Dijkstra
 
+    tr = get_tracer()
+    
     open_set = []
     heappush(open_set, (0 + heuristic(source, target), 0, source))  # (f = g+h, g, node)
     came_from = {}
     g_score = {source: 0}
     visited_order = []
+    closed_set = set()  # Prevent re-expansion
 
     while open_set:
         f, g, current = heappop(open_set)
+        
+        # Skip if already visited (closed set)
+        if current in closed_set:
+            continue
+        
+        closed_set.add(current)
         visited_order.append(current)
+        
+        h = f - g
+        tr.emit("A*", "expand", {
+            "current": current,
+            "g_score": g,
+            "h_score": h,
+            "f_score": f,
+            "parent_map": dict(came_from),
+        })
 
         if current == target:
             # reconstruct path
@@ -49,17 +77,46 @@ def astar(
                 current = came_from[current]
                 path.append(current)
             path.reverse()
+            
+            tr.emit("A*", "goal", {
+                "path": path,
+                "cost": g_score[target],
+                "parent_map": dict(came_from),
+            })
+            
             return path, g_score[target], visited_order
 
         for neighbor in G.neighbors(current):
+            if neighbor in closed_set:
+                continue
+                
             weight = G[current][neighbor].get('weight', 1)
             tentative_g = g_score[current] + weight
+            
             if tentative_g < g_score.get(neighbor, float('inf')):
+                old_g = g_score.get(neighbor, float('inf'))
                 came_from[neighbor] = current
                 g_score[neighbor] = tentative_g
-                f_score = tentative_g + heuristic(neighbor, target)
+                h_score = heuristic(neighbor, target)
+                f_score = tentative_g + h_score
                 heappush(open_set, (f_score, tentative_g, neighbor))
+                
+                tr.emit("A*", "relax", {
+                    "from": current,
+                    "to": neighbor,
+                    "weight": weight,
+                    "old_g": old_g if old_g != float('inf') else None,
+                    "new_g": tentative_g,
+                    "h_score": h_score,
+                    "f_score": f_score,
+                    "parent_map": dict(came_from),
+                })
 
+    tr.emit("A*", "no_path", {
+        "source": source,
+        "target": target,
+    })
+    
     return None
 
 
@@ -89,6 +146,10 @@ if __name__ == "__main__":
 
     # Chạy A*
     result = astar(G, 'A', 'D', heuristic)
-    print("Path:", result[0])
-    print("Cost:", result[1])
-    print("Visited:", result[2])
+    
+    if result is None:
+        print("Không tìm thấy đường đi")
+    else:
+        print("Path:", result[0])
+        print("Cost:", result[1])
+        print("Visited:", result[2])

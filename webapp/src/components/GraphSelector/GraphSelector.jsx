@@ -1,4 +1,3 @@
-import { sampleGraphs } from '../../utils/sampleGraphs';
 import './GraphSelector.css';
 
 /**
@@ -12,8 +11,13 @@ function GraphSelector({
   onSourceChange,
   onTargetChange,
   graph,
+  allGraphs = [],
 }) {
   const nodes = graph ? Array.from(graph.nodes.keys()) : [];
+
+  // Group graphs by category
+  const basicGraphs = allGraphs.filter(g => !g.id.includes('hanoi') && !g.id.includes('hcm') && !g.id.includes('directed_city'));
+  const cityGraphs = allGraphs.filter(g => g.id.includes('hanoi') || g.id.includes('hcm') || g.id.includes('directed_city'));
 
   return (
     <div className="graph-selector">
@@ -29,11 +33,22 @@ function GraphSelector({
           value={selectedGraph || ''}
           onChange={(e) => onGraphChange(e.target.value)}
         >
-          {sampleGraphs.map(g => (
-            <option key={g.id} value={g.id}>
-              {g.name}
-            </option>
-          ))}
+          <optgroup label="Basic Graphs">
+            {basicGraphs.map(g => (
+              <option key={g.id} value={g.id}>
+                {g.name}
+              </option>
+            ))}
+          </optgroup>
+          {cityGraphs.length > 0 && (
+            <optgroup label="City Maps">
+              {cityGraphs.map(g => (
+                <option key={g.id} value={g.id}>
+                  {g.name} {g.isDirected ? '(→)' : ''}
+                </option>
+              ))}
+            </optgroup>
+          )}
         </select>
       </div>
 

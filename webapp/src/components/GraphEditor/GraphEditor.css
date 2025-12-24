@@ -1,0 +1,248 @@
+.graph-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.editor-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.toggle-group {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-primary);
+  padding: 4px;
+  border-radius: var(--border-radius-sm);
+}
+
+.toggle-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.toggle-btn:hover {
+  color: var(--text-primary);
+}
+
+.toggle-btn.active {
+  background: var(--accent-primary);
+  color: white;
+}
+
+.mode-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.mode-btn {
+  flex: 1;
+  padding: 8px 6px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.mode-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
+}
+
+.mode-btn.active {
+  border-color: var(--accent-primary);
+  background: rgba(0, 217, 255, 0.1);
+  color: var(--accent-primary);
+}
+
+.weight-input {
+  width: 80px;
+}
+
+.editor-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.editor-actions .btn {
+  flex: 1;
+  min-width: 70px;
+}
+
+.editor-actions .danger {
+  color: var(--accent-danger);
+}
+
+.editor-actions .danger:hover {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: var(--accent-danger);
+}
+
+.import-modal {
+  margin-top: 8px;
+  padding: 12px;
+  background: var(--bg-card);
+  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--border-color);
+}
+
+.import-mode-toggle {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.import-mode-toggle .mode-btn {
+  flex: 1;
+}
+
+.import-textarea {
+  width: 100%;
+  height: 100px;
+  resize: vertical;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+}
+
+.import-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.editor-help {
+  padding: 10px;
+  background: rgba(0, 217, 255, 0.05);
+  border-radius: var(--border-radius-sm);
+  border: 1px dashed var(--border-color);
+}
+
+.editor-help p {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+/* Quick Input Panel */
+.quick-input-panel {
+  margin-top: 12px;
+  padding: 14px;
+  background: linear-gradient(135deg, var(--bg-card) 0%, rgba(0, 217, 255, 0.05) 100%);
+  border-radius: var(--border-radius-md);
+  border: 1px solid rgba(0, 217, 255, 0.3);
+}
+
+.quick-input-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.quick-input-header h4 {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--accent-primary);
+}
+
+.btn-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.btn-close:hover {
+  color: var(--text-primary);
+}
+
+.quick-input-help {
+  margin-bottom: 10px;
+  padding: 10px;
+  background: var(--bg-primary);
+  border-radius: var(--border-radius-sm);
+  font-size: 0.72rem;
+  line-height: 1.6;
+}
+
+.quick-input-help p {
+  margin: 0 0 6px 0;
+  color: var(--text-secondary);
+}
+
+.quick-input-help code {
+  display: inline-block;
+  padding: 2px 6px;
+  background: rgba(0, 217, 255, 0.15);
+  color: var(--accent-primary);
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+}
+
+.quick-input-help span {
+  color: var(--text-muted);
+  margin-left: 4px;
+}
+
+.quick-input-note {
+  margin-top: 8px !important;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border-color);
+  color: var(--text-muted) !important;
+  font-style: italic;
+}
+
+.quick-textarea {
+  width: 100%;
+  min-height: 140px;
+  resize: vertical;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+
+.quick-textarea:focus {
+  border-color: var(--accent-primary);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(0, 217, 255, 0.2);
+}
+
+.quick-input-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.btn-ghost:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}

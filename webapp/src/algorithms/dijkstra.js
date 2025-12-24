@@ -165,7 +165,9 @@ export function dijkstra(graph, source, target) {
           visited: [...visited],
           frontier: pq.toArray(),
           parent: Object.fromEntries(parent),
-          message: `Relaxing edge ${current} → ${neighbor}: ${oldDist === Infinity ? '∞' : oldDist} → ${newDist}`,
+          message: oldDist === Infinity 
+            ? `Discovered ${neighbor} from ${current} (distance: ${newDist})`
+            : `Updated ${neighbor}: ${oldDist} → ${newDist} (via ${current})`,
         });
       }
     }
