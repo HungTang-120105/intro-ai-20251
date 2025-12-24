@@ -25,12 +25,19 @@ function GraphCanvas({
   mapStyle = null,
   width = 800,
   height = 500,
+  // Zoom and pan props for synchronized view
+  zoom = 1,
+  onZoomChange = null,
+  pan = { x: 0, y: 0 },
+  onPanChange = null,
 }) {
   const canvasRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragNode, setDragNode] = useState(null);
   const [edgeStart, setEdgeStart] = useState(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
 
   // Colors for different states
   const colors = {
@@ -456,6 +463,13 @@ function GraphCanvas({
     ctx.save();
     ctx.scale(dpr, dpr);
 
+    // Apply zoom and pan transform
+    ctx.save();
+    ctx.translate(pan.x, pan.y);
+    ctx.translate(width / 2, height / 2);
+    ctx.scale(zoom, zoom);
+    ctx.translate(-width / 2, -height / 2);
+
     // Draw backgrounds
     drawStreetGrid(ctx);
     drawCityMapBackground(ctx);
@@ -592,8 +606,9 @@ function GraphCanvas({
       ctx.fillText(node.label || id, nodeX, nodeY);
     }
 
-    ctx.restore();
-  }, [graph, visualizationState, source, target, getNodeState, isEdgeInPath, isDirected, drawArrow, drawStreetGrid, drawCityMapBackground, getGraphOffset, colors, isDragging, dragNode, edgeStart, mousePos]);
+    ctx.restore(); // Restore zoom/pan transform
+    ctx.restore(); // Restore dpr scale
+  }, [graph, visualizationState, source, target, getNodeState, isEdgeInPath, isDirected, drawArrow, drawStreetGrid, drawCityMapBackground, getGraphOffset, colors, isDragging, dragNode, edgeStart, mousePos, zoom, pan, width, height]);
 
   // Canvas resize and setup
   useEffect(() => {
@@ -614,28 +629,40 @@ function GraphCanvas({
     draw();
   }, [draw]);
 
-  // Get node at position (accounting for offset)
-  const getNodeAt = useCallback((x, y) => {
+  // Convert screen coordinates to graph coordinates (accounting for zoom and pan)
+  const screenToGraph = useCallback((screenX, screenY) => {
+    // Reverse the transform: translate, scale, translate
+    const x = (screenX - pan.x - width / 2) / zoom + width / 2;
+    const y = (screenY - pan.y - height / 2) / zoom + height / 2;
+    return { x, y };
+  }, [zoom, pan, width, height]);
+
+  // Get node at position (accounting for offset, zoom, and pan)
+  const getNodeAt = useCallback((screenX, screenY) => {
     if (!graph) return null;
     const { offsetX, offsetY } = getGraphOffset();
+    const { x, y } = screenToGraph(screenX, screenY);
     
     for (const [id, node] of graph.nodes) {
       const nodeX = node.x + offsetX;
       const nodeY = node.y + offsetY;
       const dx = x - nodeX;
       const dy = y - nodeY;
-      if (dx * dx + dy * dy <= 22 * 22) {
+      // Adjust hit radius based on zoom
+      const hitRadius = 22 / zoom;
+      if (dx * dx + dy * dy <= hitRadius * hitRadius * zoom * zoom) {
         return id;
       }
     }
     return null;
-  }, [graph, getGraphOffset]);
+  }, [graph, getGraphOffset, screenToGraph, zoom]);
 
   // Get edge at position (check if point is near edge line)
-  const getEdgeAt = useCallback((x, y) => {
+  const getEdgeAt = useCallback((screenX, screenY) => {
     if (!graph) return null;
     const { offsetX, offsetY } = getGraphOffset();
-    const threshold = 10; // Distance threshold for edge detection
+    const { x, y } = screenToGraph(screenX, screenY);
+    const threshold = 10 / zoom; // Distance threshold for edge detection, adjusted for zoom
 
     for (const edge of graph.edges) {
       const fromNode = graph.nodes.get(edge.from);
@@ -676,40 +703,49 @@ function GraphCanvas({
       }
     }
     return null;
-  }, [graph, getGraphOffset]);
+  }, [graph, getGraphOffset, screenToGraph, zoom]);
 
   // Mouse event handlers
   const handleMouseDown = useCallback((e) => {
     const rect = canvasRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    const nodeId = getNodeAt(x, y);
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
+    const nodeId = getNodeAt(screenX, screenY);
     const { offsetX, offsetY } = getGraphOffset();
+    const graphCoords = screenToGraph(screenX, screenY);
 
     if (editorMode === 'addEdge' && nodeId) {
       setEdgeStart(nodeId);
-      setMousePos({ x, y });
+      setMousePos({ x: screenX, y: screenY });
     } else if (editorMode === 'view' && nodeId) {
       setIsDragging(true);
       setDragNode(nodeId);
+    } else if (editorMode === 'view' && !nodeId && e.button === 0) {
+      // Start panning (when clicking on empty space in view mode)
+      setIsPanning(true);
+      setPanStart({ x: screenX - pan.x, y: screenY - pan.y });
     } else if (editorMode === 'addNode' && !nodeId) {
-      // Subtract offset to get actual graph coordinates
-      if (onAddNode) onAddNode(x - offsetX, y - offsetY);
+      // Convert screen to graph coordinates, then subtract offset
+      if (onAddNode) onAddNode(graphCoords.x - offsetX, graphCoords.y - offsetY);
     }
-  }, [getNodeAt, getGraphOffset, editorMode, onAddNode]);
+  }, [getNodeAt, getGraphOffset, screenToGraph, editorMode, onAddNode, pan]);
 
   const handleMouseMove = useCallback((e) => {
     const rect = canvasRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    setMousePos({ x, y });
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
+    setMousePos({ x: screenX, y: screenY });
 
-    if (isDragging && dragNode && onNodeDrag) {
+    if (isPanning && onPanChange) {
+      // Update pan position
+      onPanChange({ x: screenX - panStart.x, y: screenY - panStart.y });
+    } else if (isDragging && dragNode && onNodeDrag) {
       const { offsetX, offsetY } = getGraphOffset();
-      // Subtract offset to get actual graph coordinates
-      onNodeDrag(dragNode, x - offsetX, y - offsetY);
+      const graphCoords = screenToGraph(screenX, screenY);
+      // Convert screen to graph coordinates, then subtract offset
+      onNodeDrag(dragNode, graphCoords.x - offsetX, graphCoords.y - offsetY);
     }
-  }, [isDragging, dragNode, onNodeDrag, getGraphOffset]);
+  }, [isDragging, dragNode, onNodeDrag, getGraphOffset, screenToGraph, isPanning, panStart, onPanChange]);
 
   const handleMouseUp = useCallback((e) => {
     const rect = canvasRef.current.getBoundingClientRect();
@@ -728,7 +764,11 @@ function GraphCanvas({
       setIsDragging(false);
       setDragNode(null);
     }
-  }, [edgeStart, getNodeAt, onAddEdge, isDragging]);
+
+    if (isPanning) {
+      setIsPanning(false);
+    }
+  }, [edgeStart, getNodeAt, onAddEdge, isDragging, isPanning]);
 
   const handleClick = useCallback((e) => {
     if (!graph || isDragging) return;
@@ -775,7 +815,43 @@ function GraphCanvas({
     }
   }, [graph, getNodeAt, getEdgeAt, onDeleteNode, onDeleteEdge]);
 
+  // Wheel handler for zoom
+  const handleWheel = useCallback((e) => {
+    e.preventDefault();
+    if (!onZoomChange) return;
+
+    const rect = canvasRef.current.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    // Calculate zoom factor
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    const newZoom = Math.max(0.2, Math.min(5, zoom * delta));
+
+    // Adjust pan to zoom towards mouse position
+    if (onPanChange) {
+      const zoomRatio = newZoom / zoom;
+      const newPanX = mouseX - (mouseX - pan.x) * zoomRatio;
+      const newPanY = mouseY - (mouseY - pan.y) * zoomRatio;
+      onPanChange({ x: newPanX, y: newPanY });
+    }
+
+    onZoomChange(newZoom);
+  }, [zoom, pan, onZoomChange, onPanChange]);
+
+  // Add wheel event listener (need to use native to prevent default)
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    canvas.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      canvas.removeEventListener('wheel', handleWheel);
+    };
+  }, [handleWheel]);
+
   const getCursorStyle = () => {
+    if (isPanning) return 'grabbing';
     if (isDragging) return 'grabbing';
     if (editorMode === 'addNode') return 'cell';
     if (editorMode === 'addEdge') return 'crosshair';
@@ -801,6 +877,33 @@ function GraphCanvas({
           {visualizationState.message}
         </div>
       )}
+      {/* Zoom controls */}
+      <div className="zoom-controls">
+        <button 
+          className="zoom-btn"
+          onClick={() => onZoomChange && onZoomChange(Math.min(5, zoom * 1.2))}
+          title="Zoom In"
+        >
+          +
+        </button>
+        <button 
+          className="zoom-btn"
+          onClick={() => {
+            onZoomChange && onZoomChange(1);
+            onPanChange && onPanChange({ x: 0, y: 0 });
+          }}
+          title="Reset View"
+        >
+          {Math.round(zoom * 100)}%
+        </button>
+        <button 
+          className="zoom-btn"
+          onClick={() => onZoomChange && onZoomChange(Math.max(0.2, zoom / 1.2))}
+          title="Zoom Out"
+        >
+          −
+        </button>
+      </div>
       {isDirected && (
         <div className="graph-type-badge directed">Directed</div>
       )}

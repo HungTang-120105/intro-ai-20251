@@ -55,6 +55,10 @@ function App() {
   // Canvas dimensions - responsive
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
 
+  // Shared zoom/pan state for synchronized view
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+
   // Resize canvas to fit container
   useEffect(() => {
     const updateCanvasSize = () => {
@@ -224,7 +228,7 @@ function App() {
     };
   }, [isPlaying, speed, results]);
 
-  // Node drag handler
+  // Node drag handler - only updates position, doesn't affect algorithm results
   const handleNodeDrag = useCallback((nodeId, x, y) => {
     if (!graph) return;
 
@@ -238,9 +242,8 @@ function App() {
       return newGraph;
     });
 
-    // Clear results when graph changes
-    setResults([]);
-    setCurrentSteps({});
+    // Don't clear results - moving nodes doesn't change graph structure
+    // Results are still valid since edges and weights remain the same
   }, [graph]);
 
   // Add node handler
@@ -451,12 +454,17 @@ function App() {
                 target={target}
                 isDirected={isDirected}
                 editorMode={'view'}
+                onNodeDrag={handleNodeDrag}
                 showStreetGrid={showStreetGrid}
                 gridInfo={gridInfo}
                 hasCityMap={hasCityMap}
                 mapStyle={mapStyle}
                 width={Math.floor((canvasSize.width - 20) / 2)}
                 height={canvasSize.height - 40}
+                zoom={zoom}
+                onZoomChange={setZoom}
+                pan={pan}
+                onPanChange={setPan}
               />
             </div>
             <div className="canvas-panel">
@@ -471,12 +479,17 @@ function App() {
                 target={target}
                 isDirected={isDirected}
                 editorMode={'view'}
+                onNodeDrag={handleNodeDrag}
                 showStreetGrid={showStreetGrid}
                 gridInfo={gridInfo}
                 hasCityMap={hasCityMap}
                 mapStyle={mapStyle}
                 width={Math.floor((canvasSize.width - 20) / 2)}
                 height={canvasSize.height - 40}
+                zoom={zoom}
+                onZoomChange={setZoom}
+                pan={pan}
+                onPanChange={setPan}
               />
             </div>
           </div>
@@ -500,6 +513,10 @@ function App() {
             mapStyle={mapStyle}
             width={canvasSize.width}
             height={canvasSize.height}
+            zoom={zoom}
+            onZoomChange={setZoom}
+            pan={pan}
+            onPanChange={setPan}
           />
         )}
       </main>
