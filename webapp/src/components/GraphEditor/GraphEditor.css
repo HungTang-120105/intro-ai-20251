@@ -370,3 +370,103 @@
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.7rem;
 }
+
+/* Layout Selector */
+.layout-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px;
+  background: var(--bg-primary);
+  border-radius: var(--border-radius-sm);
+}
+
+.input-label-sm {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.layout-select {
+  flex: 1;
+  padding: 4px 8px;
+  font-size: 0.72rem;
+  min-width: 0;
+}
+
+.layout-select:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+/* Source/Target Selection Buttons */
+.selection-buttons {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+}
+
+.selection-btn {
+  flex: 1;
+  padding: 8px 10px;
+  font-size: 0.72rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+}
+
+.selection-btn:hover {
+  background: var(--bg-card);
+}
+
+.selection-btn.source:hover,
+.selection-btn.source.active {
+  border-color: var(--accent-primary);
+  background: rgba(0, 217, 255, 0.1);
+  color: var(--accent-primary);
+}
+
+.selection-btn.target:hover,
+.selection-btn.target.active {
+  border-color: var(--accent-danger);
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--accent-danger);
+}
+
+.selection-btn.active {
+  box-shadow: 0 0 0 2px rgba(0, 217, 255, 0.3);
+}
+
+.selection-btn.target.active {
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.3);
+}
+
+.selection-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  width: 100%;
+}
+
+.selection-help {
+  padding: 8px 10px;
+  border-radius: var(--border-radius-sm);
+  font-size: 0.72rem;
+}
+
+.selection-help.source {
+  background: rgba(0, 217, 255, 0.1);
+  border: 1px dashed var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.selection-help.target {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px dashed var(--accent-danger);
+  color: var(--accent-danger);
+}

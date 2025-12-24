@@ -38,6 +38,7 @@ function App() {
   // Editor state
   const [editorMode, setEditorMode] = useState('view');
   const [nodeCounter, setNodeCounter] = useState(1);
+  const [selectionMode, setSelectionMode] = useState(null); // 'source' | 'target' | null
 
   // Algorithm state
   const [selectedAlgorithms, setSelectedAlgorithms] = useState(['dijkstra']);
@@ -285,10 +286,12 @@ function App() {
   const handleDeleteNode = useCallback((nodeId) => {
     if (!graph) return;
     
-    // Don't delete source or target
-    if (nodeId === source || nodeId === target) {
-      alert('Cannot delete source or target node');
-      return;
+    // If deleting source or target, clear them
+    if (nodeId === source) {
+      setSource(null);
+    }
+    if (nodeId === target) {
+      setTarget(null);
     }
 
     setGraph(prevGraph => {
@@ -349,25 +352,24 @@ function App() {
     }
   }, []);
 
-  // Node click handler (set source/target)
+  // Node click handler (set source/target based on selectionMode)
   const handleNodeClick = useCallback((nodeId) => {
     if (editorMode !== 'view') return;
-
-    // Shift+click for target, normal click for source
-    // For simplicity, toggle between setting source and target
-    if (source === nodeId) {
-      // Already source, do nothing
-    } else if (target === nodeId) {
-      // Already target, do nothing
-    } else if (!source) {
-      setSource(nodeId);
-    } else if (!target) {
-      setTarget(nodeId);
-    } else {
-      // Both set, update source
-      setSource(nodeId);
+    
+    // Only select source/target when in selection mode
+    if (selectionMode === 'source') {
+      if (nodeId !== target) {
+        setSource(nodeId);
+      }
+      setSelectionMode(null); // Exit selection mode after selecting
+    } else if (selectionMode === 'target') {
+      if (nodeId !== source) {
+        setTarget(nodeId);
+      }
+      setSelectionMode(null); // Exit selection mode after selecting
     }
-  }, [editorMode, source, target]);
+    // If not in selection mode, do nothing (allows double-click to work)
+  }, [editorMode, selectionMode, source, target]);
 
   // Get total steps and current step for active algorithm's visualization
   const activeResult = results[activeAlgorithmIndex] || results[0];
@@ -412,6 +414,14 @@ function App() {
           onDeleteNode={handleDeleteNode}
           onDeleteEdge={handleDeleteEdge}
           graph={graph}
+          canvasWidth={800}
+          canvasHeight={600}
+          selectionMode={selectionMode}
+          onSelectionModeChange={setSelectionMode}
+          source={source}
+          target={target}
+          onClearSource={() => setSource(null)}
+          onClearTarget={() => setTarget(null)}
         />
 
         <div className="divider" />
