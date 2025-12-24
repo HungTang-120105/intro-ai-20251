@@ -3,7 +3,7 @@ import './GraphCanvas.css';
 
 /**
  * GraphCanvas component - Canvas-based graph rendering with visualization support
- * Now supports: node dragging, adding nodes/edges, directed/undirected graphs, street grid
+ * Now supports: node dragging, adding nodes/edges, directed/undirected graphs, street grid, delete mode
  */
 function GraphCanvas({
   graph,
@@ -15,6 +15,8 @@ function GraphCanvas({
   onNodeDrag = null,
   onAddNode = null,
   onAddEdge = null,
+  onDeleteNode = null,
+  onDeleteEdge = null,
   isDirected = false,
   editorMode = 'view',
   showStreetGrid = false,
@@ -629,6 +631,53 @@ function GraphCanvas({
     return null;
   }, [graph, getGraphOffset]);
 
+  // Get edge at position (check if point is near edge line)
+  const getEdgeAt = useCallback((x, y) => {
+    if (!graph) return null;
+    const { offsetX, offsetY } = getGraphOffset();
+    const threshold = 10; // Distance threshold for edge detection
+
+    for (const edge of graph.edges) {
+      const fromNode = graph.nodes.get(edge.from);
+      const toNode = graph.nodes.get(edge.to);
+      if (!fromNode || !toNode) continue;
+
+      const x1 = fromNode.x + offsetX;
+      const y1 = fromNode.y + offsetY;
+      const x2 = toNode.x + offsetX;
+      const y2 = toNode.y + offsetY;
+
+      // Calculate distance from point to line segment
+      const A = x - x1;
+      const B = y - y1;
+      const C = x2 - x1;
+      const D = y2 - y1;
+
+      const dot = A * C + B * D;
+      const lenSq = C * C + D * D;
+      let param = -1;
+      if (lenSq !== 0) param = dot / lenSq;
+
+      let xx, yy;
+      if (param < 0) {
+        xx = x1;
+        yy = y1;
+      } else if (param > 1) {
+        xx = x2;
+        yy = y2;
+      } else {
+        xx = x1 + param * C;
+        yy = y1 + param * D;
+      }
+
+      const dist = Math.sqrt((x - xx) * (x - xx) + (y - yy) * (y - yy));
+      if (dist < threshold) {
+        return { from: edge.from, to: edge.to };
+      }
+    }
+    return null;
+  }, [graph, getGraphOffset]);
+
   // Mouse event handlers
   const handleMouseDown = useCallback((e) => {
     const rect = canvasRef.current.getBoundingClientRect();
@@ -688,12 +737,43 @@ function GraphCanvas({
     const y = e.clientY - rect.top;
     const nodeId = getNodeAt(x, y);
 
+    // Delete mode - delete node or edge on click
+    if (editorMode === 'delete') {
+      if (nodeId) {
+        if (onDeleteNode) onDeleteNode(nodeId);
+      } else {
+        const edge = getEdgeAt(x, y);
+        if (edge && onDeleteEdge) {
+          onDeleteEdge(edge.from, edge.to);
+        }
+      }
+      return;
+    }
+
     if (nodeId) {
       if (onNodeClick) onNodeClick(nodeId);
     } else {
       if (onCanvasClick) onCanvasClick(x, y);
     }
-  }, [graph, isDragging, getNodeAt, onNodeClick, onCanvasClick]);
+  }, [graph, isDragging, getNodeAt, getEdgeAt, onNodeClick, onCanvasClick, editorMode, onDeleteNode, onDeleteEdge]);
+
+  // Double-click to delete (works in all modes)
+  const handleDoubleClick = useCallback((e) => {
+    if (!graph) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const nodeId = getNodeAt(x, y);
+
+    if (nodeId) {
+      if (onDeleteNode) onDeleteNode(nodeId);
+    } else {
+      const edge = getEdgeAt(x, y);
+      if (edge && onDeleteEdge) {
+        onDeleteEdge(edge.from, edge.to);
+      }
+    }
+  }, [graph, getNodeAt, getEdgeAt, onDeleteNode, onDeleteEdge]);
 
   const getCursorStyle = () => {
     if (isDragging) return 'grabbing';
@@ -710,6 +790,7 @@ function GraphCanvas({
         className="graph-canvas"
         style={{ cursor: getCursorStyle() }}
         onClick={handleClick}
+        onDoubleClick={handleDoubleClick}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}

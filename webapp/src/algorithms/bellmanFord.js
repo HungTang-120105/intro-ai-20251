@@ -6,9 +6,10 @@
  * @param {Object} graph - Graph object with nodes and edges
  * @param {string} source - Source node id
  * @param {string} target - Target node id
+ * @param {boolean} isDirected - Whether the graph is directed
  * @returns {Object} - Result with path, cost, steps, and visited order
  */
-export function bellmanFord(graph, source, target) {
+export function bellmanFord(graph, source, target, isDirected = false) {
   const steps = [];
   const dist = new Map();
   const parent = new Map();
@@ -76,7 +77,7 @@ export function bellmanFord(graph, source, target) {
       }
 
       // For undirected graph, also relax to -> from
-      if (dist.get(v) !== Infinity && dist.get(v) + w < dist.get(u)) {
+      if (!isDirected && dist.get(v) !== Infinity && dist.get(v) + w < dist.get(u)) {
         const oldDist = dist.get(u);
         dist.set(u, dist.get(v) + w);
         parent.set(u, v);
@@ -133,7 +134,8 @@ export function bellmanFord(graph, source, target) {
       hasNegativeCycle = true;
       break;
     }
-    if (dist.get(v) !== Infinity && dist.get(v) + w < dist.get(u)) {
+    // For undirected graphs, check reverse direction too
+    if (!isDirected && dist.get(v) !== Infinity && dist.get(v) + w < dist.get(u)) {
       hasNegativeCycle = true;
       break;
     }

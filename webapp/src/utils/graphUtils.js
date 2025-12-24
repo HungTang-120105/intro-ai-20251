@@ -53,13 +53,17 @@ export function removeEdge(graph, from, to) {
 
 /**
  * Get neighbors of a node
+ * @param {Object} graph - Graph object with nodes and edges
+ * @param {string} nodeId - Node to get neighbors for
+ * @param {boolean} isDirected - If true, only return outgoing edges
  */
-export function getNeighbors(graph, nodeId) {
+export function getNeighbors(graph, nodeId, isDirected = false) {
   const neighbors = [];
   for (const edge of graph.edges) {
     if (edge.from === nodeId) {
       neighbors.push({ node: edge.to, weight: edge.weight });
-    } else if (edge.to === nodeId) {
+    } else if (!isDirected && edge.to === nodeId) {
+      // Only add reverse direction for undirected graphs
       neighbors.push({ node: edge.from, weight: edge.weight });
     }
   }

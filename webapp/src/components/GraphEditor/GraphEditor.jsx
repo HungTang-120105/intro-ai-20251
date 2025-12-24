@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import './GraphEditor.css';
 
 /**
@@ -11,17 +11,23 @@ function GraphEditor({
   onDirectedChange,
   onClearGraph,
   onImportGraph,
-  onExportGraph,
-  onImportEdgeList,
+  onDeleteNode,
+  onDeleteEdge,
   graph,
 }) {
-  const [showImport, setShowImport] = useState(false);
-  const [importMode, setImportMode] = useState('text'); // 'text' | 'json'
-  const [importData, setImportData] = useState('');
+  const [edgeListText, setEdgeListText] = useState('');
   const [weightInput, setWeightInput] = useState('1');
-  const [showQuickInput, setShowQuickInput] = useState(false);
-  const [quickInputData, setQuickInputData] = useState('');
   const textareaRef = useRef(null);
+
+  // Convert graph to edge list text whenever graph changes
+  useEffect(() => {
+    if (graph && graph.edges) {
+      const lines = graph.edges.map(e => `${e.from} ${e.to} ${e.weight}`);
+      setEdgeListText(lines.join('\n'));
+    } else {
+      setEdgeListText('');
+    }
+  }, [graph]);
 
   // Parse edge list format: "u v w" or "u v"
   const parseEdgeList = (text) => {
@@ -75,26 +81,17 @@ function GraphEditor({
     };
   };
 
-  const handleImport = () => {
+  // Apply changes from text editor
+  const handleApplyText = () => {
     try {
-      let data;
-
-      if (importMode === 'json') {
-        data = JSON.parse(importData);
-      } else {
-        // Text/edge list format
-        data = parseEdgeList(importData);
-      }
-
+      const data = parseEdgeList(edgeListText);
       if (data.nodes && data.nodes.length > 0) {
         if (onImportGraph) onImportGraph(data);
-        setShowImport(false);
-        setImportData('');
       } else {
-        alert('No valid edges found');
+        alert('Không tìm thấy cạnh hợp lệ');
       }
     } catch (e) {
-      alert('Invalid format: ' + e.message);
+      alert('Lỗi định dạng: ' + e.message);
     }
   };
 
@@ -116,38 +113,6 @@ function GraphEditor({
     const text = lines.join('\n');
     navigator.clipboard.writeText(text);
     alert('Edge list copied to clipboard!');
-  };
-
-  // Quick add edge from input
-  const handleQuickAdd = () => {
-    if (!quickInputData.trim()) return;
-    try {
-      const data = parseEdgeList(quickInputData);
-      if (data.nodes && data.nodes.length > 0) {
-        if (onImportGraph) onImportGraph(data);
-        setQuickInputData('');
-        setShowQuickInput(false);
-      } else {
-        alert('Không tìm thấy cạnh hợp lệ');
-      }
-    } catch (e) {
-      alert('Lỗi định dạng: ' + e.message);
-    }
-  };
-
-  // Sample edge list for quick reference
-  const sampleEdgeList = `# Ví dụ nhập graph:
-# Có trọng số: A B 5
-# Không trọng số: A B
-A B 4
-B C 2
-C D 3
-D E 1
-A D 7
-B E 5`;
-
-  const fillSample = () => {
-    setImportData(sampleEdgeList);
   };
 
   return (
@@ -201,8 +166,24 @@ B E 5`;
           >
             ↔ Edge
           </button>
+          <button
+            className={`mode-btn delete ${editorMode === 'delete' ? 'active' : ''}`}
+            onClick={() => onModeChange('delete')}
+            title="Click node/edge to delete"
+          >
+            🗑️ Delete
+          </button>
         </div>
       </div>
+
+      {/* Delete Mode Help */}
+      {editorMode === 'delete' && (
+        <div className="editor-row">
+          <div className="mode-help delete-help">
+            ⚠️ Click node hoặc edge để xóa. Double-click cũng xóa trong mọi mode.
+          </div>
+        </div>
+      )}
 
       {/* Edge Weight (for addEdge mode) */}
       {editorMode === 'addEdge' && (
@@ -218,105 +199,48 @@ B E 5`;
         </div>
       )}
 
+      {/* Inline Edge List Editor - Always visible */}
+      <div className="edge-list-editor">
+        <div className="edge-list-header">
+          <label className="input-label">📝 Edge List (u v w)</label>
+          <div className="edge-list-actions">
+            <button className="btn btn-xs btn-ghost" onClick={handleExport} title="Copy JSON">
+              JSON
+            </button>
+            <button className="btn btn-xs btn-ghost" onClick={handleExportEdgeList} title="Copy Text">
+              Copy
+            </button>
+          </div>
+        </div>
+        <textarea
+          ref={textareaRef}
+          className="input edge-list-textarea"
+          placeholder="A B 4&#10;B C 2&#10;C D 3"
+          value={edgeListText}
+          onChange={(e) => setEdgeListText(e.target.value)}
+          rows={6}
+        />
+        <div className="edge-list-footer">
+          <span className="edge-count">{graph?.edges?.length || 0} edges</span>
+          <button className="btn btn-xs btn-primary" onClick={handleApplyText}>
+            ✓ Apply
+          </button>
+        </div>
+      </div>
+
       {/* Actions */}
       <div className="editor-actions">
-        <button className="btn btn-secondary btn-sm" onClick={() => setShowQuickInput(!showQuickInput)}>
-          ✍️ Nhập tay
-        </button>
-        <button className="btn btn-secondary btn-sm" onClick={() => setShowImport(!showImport)}>
-          📥 Import
-        </button>
-        <button className="btn btn-secondary btn-sm" onClick={handleExport}>
-          📤 JSON
-        </button>
-        <button className="btn btn-secondary btn-sm" onClick={handleExportEdgeList}>
-          📤 Text
-        </button>
         <button className="btn btn-secondary btn-sm danger" onClick={onClearGraph}>
-          🗑️
+          🗑️ Clear All
         </button>
       </div>
 
-      {/* Quick Input Panel - Nhập tay */}
-      {showQuickInput && (
-        <div className="quick-input-panel">
-          <div className="quick-input-header">
-            <h4>📝 Nhập Graph (Danh sách cạnh)</h4>
-            <button className="btn-close" onClick={() => setShowQuickInput(false)}>×</button>
-          </div>
-          <div className="quick-input-help">
-            <p>Mỗi dòng là một cạnh theo định dạng:</p>
-            <code>u v w</code> <span>– có trọng số w</span><br/>
-            <code>u v</code> <span>– không có trọng số (mặc định = 1)</span>
-            <p className="quick-input-note">Node mới sẽ tự động được tạo</p>
-          </div>
-          <textarea
-            ref={textareaRef}
-            className="input quick-textarea"
-            placeholder={`A B 4\nB C 2\nC D\nD E 3`}
-            value={quickInputData}
-            onChange={(e) => setQuickInputData(e.target.value)}
-            rows={8}
-          />
-          <div className="quick-input-actions">
-            <button className="btn btn-sm btn-ghost" onClick={() => setQuickInputData('')}>
-              Xóa
-            </button>
-            <button className="btn btn-sm btn-primary" onClick={handleQuickAdd}>
-              ✓ Tạo Graph
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Import Modal */}
-      {showImport && (
-        <div className="import-modal">
-          <div className="import-mode-toggle">
-            <button
-              className={`mode-btn ${importMode === 'text' ? 'active' : ''}`}
-              onClick={() => setImportMode('text')}
-            >
-              📝 Edge List
-            </button>
-            <button
-              className={`mode-btn ${importMode === 'json' ? 'active' : ''}`}
-              onClick={() => setImportMode('json')}
-            >
-              { } JSON
-            </button>
-          </div>
-
-          <textarea
-            className="input import-textarea"
-            placeholder={importMode === 'text'
-              ? 'Nhập danh sách cạnh:\nA B 4\nB C 2\nC D\n(mỗi dòng: node1 node2 [weight])'
-              : 'Paste JSON: {"nodes": [...], "edges": [...]}'}
-            value={importData}
-            onChange={(e) => setImportData(e.target.value)}
-          />
-
-          <div className="import-actions">
-            {importMode === 'text' && (
-              <button className="btn btn-sm btn-ghost" onClick={fillSample}>
-                Ví dụ
-              </button>
-            )}
-            <button className="btn btn-sm btn-secondary" onClick={() => setShowImport(false)}>
-              Cancel
-            </button>
-            <button className="btn btn-sm btn-primary" onClick={handleImport}>
-              Import
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Instructions */}
       <div className="editor-help">
-        {editorMode === 'view' && <p>🖱️ Drag nodes to move them</p>}
+        {editorMode === 'view' && <p>🖱️ Drag nodes to move. Double-click to delete.</p>}
         {editorMode === 'addNode' && <p>🖱️ Click canvas to add node</p>}
         {editorMode === 'addEdge' && <p>🖱️ Drag from one node to another</p>}
+        {editorMode === 'delete' && <p>🖱️ Click node or edge to delete</p>}
       </div>
     </div>
   );

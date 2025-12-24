@@ -66,10 +66,11 @@ class PriorityQueue {
  * @param {Object} graph - Graph object with nodes and edges
  * @param {string} source - Source node id
  * @param {string} target - Target node id
+ * @param {boolean} isDirected - Whether the graph is directed
  * @param {Function} heuristic - Heuristic function h(node, target)
  * @returns {Object} - Result with path, cost, steps, and visited order
  */
-export function astar(graph, source, target, heuristic = null) {
+export function astar(graph, source, target, isDirected = false, heuristic = null) {
   const steps = [];
   const gScore = new Map(); // Cost from start
   const fScore = new Map(); // Estimated total cost
@@ -159,7 +160,7 @@ export function astar(graph, source, target, heuristic = null) {
     }
 
     // Explore neighbors
-    const neighbors = getNeighbors(graph, current);
+    const neighbors = getNeighbors(graph, current, isDirected);
     for (const { node: neighbor, weight } of neighbors) {
       if (visited.has(neighbor)) continue;
 

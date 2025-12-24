@@ -92,6 +92,68 @@
   border-color: var(--accent-danger);
 }
 
+/* Inline Edge List Editor */
+.edge-list-editor {
+  margin-top: 4px;
+  padding: 10px;
+  background: var(--bg-primary);
+  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--border-color);
+}
+
+.edge-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.edge-list-header .input-label {
+  margin: 0;
+  font-size: 0.72rem;
+}
+
+.edge-list-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.edge-list-textarea {
+  width: 100%;
+  min-height: 100px;
+  resize: vertical;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  padding: 8px;
+  border-radius: var(--border-radius-sm);
+}
+
+.edge-list-textarea:focus {
+  border-color: var(--accent-primary);
+  outline: none;
+}
+
+.edge-list-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.edge-count {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.btn-xs {
+  padding: 4px 8px;
+  font-size: 0.65rem;
+}
+
 .import-modal {
   margin-top: 8px;
   padding: 12px;
@@ -245,4 +307,66 @@
 .btn-ghost:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
+}
+
+/* Delete Mode Button */
+.mode-btn.delete {
+  color: var(--accent-danger);
+}
+
+.mode-btn.delete:hover {
+  border-color: var(--accent-danger);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.mode-btn.delete.active {
+  border-color: var(--accent-danger);
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--accent-danger);
+}
+
+/* Delete Mode Help */
+.delete-help {
+  padding: 8px 10px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px dashed var(--accent-danger);
+  border-radius: var(--border-radius-sm);
+  font-size: 0.72rem;
+  color: var(--accent-danger);
+}
+
+/* Import Modal Header */
+.import-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.import-header h4 {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--accent-primary);
+}
+
+.import-help {
+  margin-bottom: 8px;
+  padding: 8px;
+  background: var(--bg-primary);
+  border-radius: var(--border-radius-sm);
+  font-size: 0.72rem;
+}
+
+.import-help p {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.import-help code {
+  padding: 2px 6px;
+  background: rgba(0, 217, 255, 0.15);
+  color: var(--accent-primary);
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
 }

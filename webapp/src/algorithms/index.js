@@ -72,14 +72,14 @@ export function getAlgorithm(id) {
 /**
  * Run an algorithm and return results
  */
-export function runAlgorithm(algorithmId, graph, source, target) {
+export function runAlgorithm(algorithmId, graph, source, target, isDirected = false) {
   const algo = getAlgorithm(algorithmId);
   if (!algo) {
     throw new Error(`Unknown algorithm: ${algorithmId}`);
   }
 
   const startTime = performance.now();
-  const result = algo.run(graph, source, target);
+  const result = algo.run(graph, source, target, isDirected);
   const endTime = performance.now();
 
   return {

@@ -14,6 +14,19 @@ import './index.css';
 // Combine all graph sources
 const allGraphs = [...sampleGraphs, ...cityGraphs];
 
+// Algorithm colors for visualization
+const algoColors = {
+  bfs: '#3b82f6',
+  dfs: '#8b5cf6',
+  dijkstra: '#22c55e',
+  astar: '#f59e0b',
+  'bellman-ford': '#ef4444',
+};
+
+function getAlgoColor(algorithmId) {
+  return algoColors[algorithmId] || '#64748b';
+}
+
 function App() {
   // Graph state
   const [selectedGraphId, setSelectedGraphId] = useState('simple');
@@ -30,6 +43,7 @@ function App() {
   const [selectedAlgorithms, setSelectedAlgorithms] = useState(['dijkstra']);
   const [results, setResults] = useState([]);
   const [currentSteps, setCurrentSteps] = useState({});
+  const [activeAlgorithmIndex, setActiveAlgorithmIndex] = useState(0); // Which algorithm to visualize
 
   // Playback state
   const [isPlaying, setIsPlaying] = useState(false);
@@ -93,17 +107,23 @@ function App() {
     }
   }, [selectedGraphId]);
 
-  // Get current visualization state for active algorithm
-  const getVisualizationState = useCallback(() => {
-    if (results.length === 0) return null;
+  // Get visualization state for a specific algorithm by index
+  const getVisualizationStateForIndex = useCallback((index) => {
+    if (results.length === 0 || index >= results.length) return null;
 
-    // Use first selected algorithm's state
-    const activeResult = results[0];
-    const stepIndex = currentSteps[activeResult.algorithmId] || 0;
-    const step = activeResult.steps[stepIndex];
+    const result = results[index];
+    if (!result) return null;
+    
+    const stepIndex = currentSteps[result.algorithmId] || 0;
+    const step = result.steps[stepIndex];
 
     return step || null;
   }, [results, currentSteps]);
+
+  // Get current visualization state for active algorithm (for single view)
+  const getVisualizationState = useCallback(() => {
+    return getVisualizationStateForIndex(activeAlgorithmIndex);
+  }, [getVisualizationStateForIndex, activeAlgorithmIndex]);
 
   // Run selected algorithms
   const handleRunAll = useCallback(() => {
@@ -111,9 +131,10 @@ function App() {
 
     setIsPlaying(false);
     setEditorMode('view');
+    setActiveAlgorithmIndex(0); // Reset to first algorithm
 
     const newResults = selectedAlgorithms.map(algoId => {
-      return runAlgorithm(algoId, graph, source, target);
+      return runAlgorithm(algoId, graph, source, target, isDirected);
     });
 
     setResults(newResults);
@@ -260,6 +281,43 @@ function App() {
     setCurrentSteps({});
   }, [graph, isDirected]);
 
+  // Delete node handler
+  const handleDeleteNode = useCallback((nodeId) => {
+    if (!graph) return;
+    
+    // Don't delete source or target
+    if (nodeId === source || nodeId === target) {
+      alert('Cannot delete source or target node');
+      return;
+    }
+
+    setGraph(prevGraph => {
+      const newGraph = cloneGraph(prevGraph);
+      newGraph.nodes.delete(nodeId);
+      newGraph.edges = newGraph.edges.filter(e => e.from !== nodeId && e.to !== nodeId);
+      return newGraph;
+    });
+
+    setResults([]);
+    setCurrentSteps({});
+  }, [graph, source, target]);
+
+  // Delete edge handler
+  const handleDeleteEdge = useCallback((from, to) => {
+    if (!graph) return;
+
+    setGraph(prevGraph => {
+      const newGraph = cloneGraph(prevGraph);
+      newGraph.edges = newGraph.edges.filter(
+        e => !((e.from === from && e.to === to) || (!isDirected && e.from === to && e.to === from))
+      );
+      return newGraph;
+    });
+
+    setResults([]);
+    setCurrentSteps({});
+  }, [graph, isDirected]);
+
   // Clear graph handler
   const handleClearGraph = useCallback(() => {
     if (confirm('Clear all nodes and edges?')) {
@@ -311,13 +369,10 @@ function App() {
     }
   }, [editorMode, source, target]);
 
-  // Get total steps and current step for controls
-  const totalSteps = results.length > 0
-    ? Math.max(...results.map(r => r.steps.length))
-    : 0;
-  const currentStep = results.length > 0
-    ? Math.max(...Object.values(currentSteps))
-    : 0;
+  // Get total steps and current step for active algorithm's visualization
+  const activeResult = results[activeAlgorithmIndex] || results[0];
+  const totalSteps = activeResult ? activeResult.steps.length : 0;
+  const currentStep = activeResult ? (currentSteps[activeResult.algorithmId] || 0) : 0;
 
   return (
     <div className="app">
@@ -354,6 +409,8 @@ function App() {
           onDirectedChange={setIsDirected}
           onClearGraph={handleClearGraph}
           onImportGraph={handleImportGraph}
+          onDeleteNode={handleDeleteNode}
+          onDeleteEdge={handleDeleteEdge}
           graph={graph}
         />
 
@@ -367,26 +424,74 @@ function App() {
         />
       </aside>
 
-      {/* Main Canvas */}
+      {/* Main Canvas Area */}
       <main className="main-canvas" ref={mainCanvasRef}>
-        <GraphCanvas
-          graph={graph}
-          visualizationState={getVisualizationState()}
-          source={source}
-          target={target}
-          isDirected={isDirected}
-          editorMode={editorMode}
-          onNodeClick={handleNodeClick}
-          onNodeDrag={handleNodeDrag}
-          onAddNode={handleAddNode}
-          onAddEdge={handleAddEdge}
-          showStreetGrid={showStreetGrid}
-          gridInfo={gridInfo}
-          hasCityMap={hasCityMap}
-          mapStyle={mapStyle}
-          width={canvasSize.width}
-          height={canvasSize.height}
-        />
+        {/* Show dual view when 2+ algorithms have results */}
+        {results.length >= 2 ? (
+          <div className="dual-canvas-container">
+            <div className="canvas-panel">
+              <div className="canvas-panel-header" style={{ '--algo-color': getAlgoColor(results[0]?.algorithmId) }}>
+                {results[0]?.algorithmName}
+                <span className="step-info">Step {(currentSteps[results[0]?.algorithmId] || 0) + 1}/{results[0]?.steps.length}</span>
+              </div>
+              <GraphCanvas
+                graph={graph}
+                visualizationState={getVisualizationStateForIndex(0)}
+                source={source}
+                target={target}
+                isDirected={isDirected}
+                editorMode={'view'}
+                showStreetGrid={showStreetGrid}
+                gridInfo={gridInfo}
+                hasCityMap={hasCityMap}
+                mapStyle={mapStyle}
+                width={Math.floor((canvasSize.width - 20) / 2)}
+                height={canvasSize.height - 40}
+              />
+            </div>
+            <div className="canvas-panel">
+              <div className="canvas-panel-header" style={{ '--algo-color': getAlgoColor(results[1]?.algorithmId) }}>
+                {results[1]?.algorithmName}
+                <span className="step-info">Step {(currentSteps[results[1]?.algorithmId] || 0) + 1}/{results[1]?.steps.length}</span>
+              </div>
+              <GraphCanvas
+                graph={graph}
+                visualizationState={getVisualizationStateForIndex(1)}
+                source={source}
+                target={target}
+                isDirected={isDirected}
+                editorMode={'view'}
+                showStreetGrid={showStreetGrid}
+                gridInfo={gridInfo}
+                hasCityMap={hasCityMap}
+                mapStyle={mapStyle}
+                width={Math.floor((canvasSize.width - 20) / 2)}
+                height={canvasSize.height - 40}
+              />
+            </div>
+          </div>
+        ) : (
+          <GraphCanvas
+            graph={graph}
+            visualizationState={getVisualizationState()}
+            source={source}
+            target={target}
+            isDirected={isDirected}
+            editorMode={editorMode}
+            onNodeClick={handleNodeClick}
+            onNodeDrag={handleNodeDrag}
+            onAddNode={handleAddNode}
+            onAddEdge={handleAddEdge}
+            onDeleteNode={handleDeleteNode}
+            onDeleteEdge={handleDeleteEdge}
+            showStreetGrid={showStreetGrid}
+            gridInfo={gridInfo}
+            hasCityMap={hasCityMap}
+            mapStyle={mapStyle}
+            width={canvasSize.width}
+            height={canvasSize.height}
+          />
+        )}
       </main>
 
       {/* Right Sidebar */}
@@ -404,6 +509,9 @@ function App() {
             onReset={handleReset}
             onSpeedChange={setSpeed}
             disabled={results.length === 0}
+            results={results}
+            activeAlgorithmIndex={activeAlgorithmIndex}
+            onActiveAlgorithmChange={setActiveAlgorithmIndex}
           />
         </div>
 

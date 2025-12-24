@@ -7,9 +7,10 @@ import { getNeighbors } from '../utils/graphUtils';
  * @param {Object} graph - Graph object with nodes and edges
  * @param {string} source - Source node id
  * @param {string} target - Target node id
+ * @param {boolean} isDirected - Whether the graph is directed
  * @returns {Object} - Result with path, cost, steps, and visited order
  */
-export function dfs(graph, source, target) {
+export function dfs(graph, source, target, isDirected = false) {
   const steps = [];
   const visited = new Set();
   const parent = new Map();
@@ -72,7 +73,7 @@ export function dfs(graph, source, target) {
     }
 
     // Explore neighbors (reversed to maintain order)
-    const neighbors = getNeighbors(graph, current).reverse();
+    const neighbors = getNeighbors(graph, current, isDirected).reverse();
     for (const { node: neighbor } of neighbors) {
       if (!visited.has(neighbor) && !parent.has(neighbor)) {
         parent.set(neighbor, current);

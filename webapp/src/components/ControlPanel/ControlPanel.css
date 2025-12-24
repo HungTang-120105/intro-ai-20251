@@ -4,6 +4,49 @@
   gap: 16px;
 }
 
+/* Algorithm selector */
+.algorithm-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.algo-label {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.algo-tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.algo-tab {
+  padding: 6px 12px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 500;
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.algo-tab:hover {
+  border-color: var(--algo-color, var(--accent-primary));
+  color: var(--text-primary);
+}
+
+.algo-tab.active {
+  border-color: var(--algo-color, var(--accent-primary));
+  background: color-mix(in srgb, var(--algo-color, var(--accent-primary)) 15%, transparent);
+  color: var(--algo-color, var(--accent-primary));
+}
+
 .control-buttons {
   display: flex;
   justify-content: center;

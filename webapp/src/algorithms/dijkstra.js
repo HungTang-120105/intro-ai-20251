@@ -66,9 +66,10 @@ class PriorityQueue {
  * @param {Object} graph - Graph object with nodes and edges
  * @param {string} source - Source node id
  * @param {string} target - Target node id
+ * @param {boolean} isDirected - Whether the graph is directed
  * @returns {Object} - Result with path, cost, steps, and visited order
  */
-export function dijkstra(graph, source, target) {
+export function dijkstra(graph, source, target, isDirected = false) {
   const steps = [];
   const dist = new Map();
   const parent = new Map();
@@ -142,7 +143,7 @@ export function dijkstra(graph, source, target) {
     }
 
     // Relax edges
-    const neighbors = getNeighbors(graph, current);
+    const neighbors = getNeighbors(graph, current, isDirected);
     for (const { node: neighbor, weight } of neighbors) {
       if (visited.has(neighbor)) continue;
 

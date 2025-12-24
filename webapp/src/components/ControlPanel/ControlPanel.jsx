@@ -1,5 +1,18 @@
 import './ControlPanel.css';
 
+// Algorithm colors
+const algoColors = {
+  bfs: '#3b82f6',
+  dfs: '#8b5cf6',
+  dijkstra: '#22c55e',
+  astar: '#f59e0b',
+  'bellman-ford': '#ef4444',
+};
+
+function getAlgoColor(algorithmId) {
+  return algoColors[algorithmId] || '#64748b';
+}
+
 /**
  * ControlPanel - Controls for visualization playback
  */
@@ -15,6 +28,10 @@ function ControlPanel({
   onReset,
   onSpeedChange,
   disabled = false,
+  // Multi-algorithm support
+  results = [],
+  activeAlgorithmIndex = 0,
+  onActiveAlgorithmChange,
 }) {
   const progress = totalSteps > 0 ? ((currentStep + 1) / totalSteps) * 100 : 0;
 
@@ -30,6 +47,27 @@ function ControlPanel({
         <span className="section-icon">🎮</span>
         <span className="section-title">Controls</span>
       </div>
+
+      {/* Algorithm selector when multiple results */}
+      {results.length > 1 && (
+        <div className="algorithm-selector">
+          <label className="algo-label">Visualizing:</label>
+          <div className="algo-tabs">
+            {results.map((result, index) => (
+              <button
+                key={result.algorithmId}
+                className={`algo-tab ${activeAlgorithmIndex === index ? 'active' : ''}`}
+                onClick={() => onActiveAlgorithmChange(index)}
+                style={{
+                  '--algo-color': getAlgoColor(result.algorithmId)
+                }}
+              >
+                {result.algorithmName}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="control-buttons">
         <button
