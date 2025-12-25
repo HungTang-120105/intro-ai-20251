@@ -27,6 +27,7 @@ def graph_to_json(G, simplify=False, include_geometry=True):
         simplify: If True, only return node positions. If False, include street geometry
         include_geometry: Include edge geometry for rendering actual streets
     """
+    # Keep as directed graph - OSM has one-way streets
     # Project to Web Mercator for better visualization
     G_proj = ox.project_graph(G)
     

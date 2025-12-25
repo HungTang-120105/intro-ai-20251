@@ -527,7 +527,7 @@ function App() {
         setTarget(nodes[nodes.length - 1].id);
       }
       
-      setIsDirected(false);
+      setIsDirected(true); // OSM has one-way streets
       setShowStreetGrid(params.includeGeometry);
       setHasCityMap(true);
       setMapStyle({
