@@ -91,57 +91,66 @@ body {
 .app {
   display: grid;
   grid-template-columns: 280px 1fr 320px;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: 1fr;
   height: 100vh;
   gap: 0;
-}
-
-.app-header {
-  grid-column: 1 / -1;
-  background: linear-gradient(135deg, var(--bg-secondary), var(--bg-card));
-  padding: 12px 24px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid var(--border-color);
-  box-shadow: var(--shadow-md);
-}
-
-.app-logo {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.app-logo h1 {
-  font-size: 1.5rem;
-  font-weight: 700;
-  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.app-logo-icon {
-  width: 36px;
-  height: 36px;
-  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.2rem;
-}
-
-.app-subtitle {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
 }
 
 .divider {
   height: 1px;
   background: var(--border-color);
   margin: 16px 0;
+}
+
+/* Data Source Tabs */
+.data-source-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-card);
+  padding: 4px;
+  border-radius: var(--border-radius-sm);
+  margin-bottom: 16px;
+}
+
+.data-tab {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.data-tab:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.data-tab.active {
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+}
+
+/* Problem Info Badge */
+.problem-info-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: linear-gradient(135deg, rgba(0, 217, 255, 0.1), rgba(124, 58, 237, 0.1));
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--border-radius-sm);
+  margin-top: 12px;
+}
+
+.problem-type {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--accent-primary);
 }
 
 /* Sidebar - Left */

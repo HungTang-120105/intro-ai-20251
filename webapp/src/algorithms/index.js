@@ -5,6 +5,9 @@ import { dfs } from './dfs';
 import { dijkstra } from './dijkstra';
 import { astar } from './astar';
 import { bellmanFord } from './bellmanFord';
+import { ucs } from './ucs';
+import { aco } from './aco';
+import { lpaStar } from './lpaStar';
 
 /**
  * Available algorithms with metadata
@@ -31,6 +34,16 @@ export const algorithms = [
     run: dfs,
   },
   {
+    id: 'ucs',
+    name: 'UCS',
+    fullName: 'Uniform Cost Search',
+    description: 'Always expands the node with lowest path cost. Optimal for non-negative weights.',
+    complexity: 'O((V + E) log V)',
+    optimal: 'Yes (non-negative)',
+    color: '#06b6d4', // Cyan
+    run: ucs,
+  },
+  {
     id: 'dijkstra',
     name: 'Dijkstra',
     fullName: "Dijkstra's Algorithm",
@@ -51,6 +64,16 @@ export const algorithms = [
     run: astar,
   },
   {
+    id: 'lpastar',
+    name: 'LPA*',
+    fullName: 'Lifelong Planning A*',
+    description: 'Incremental A* that efficiently updates when graph changes. Good for dynamic environments.',
+    complexity: 'O(V² log V) worst',
+    optimal: 'Yes',
+    color: '#ec4899', // Pink
+    run: lpaStar,
+  },
+  {
     id: 'bellman-ford',
     name: 'Bellman-Ford',
     fullName: 'Bellman-Ford Algorithm',
@@ -59,6 +82,16 @@ export const algorithms = [
     optimal: 'Yes',
     color: '#ef4444', // Red
     run: bellmanFord,
+  },
+  {
+    id: 'aco',
+    name: 'ACO',
+    fullName: 'Ant Colony Optimization',
+    description: 'Metaheuristic inspired by ant behavior. Stochastic, may find different paths each run.',
+    complexity: 'O(iterations × ants × E)',
+    optimal: 'Approximate',
+    color: '#84cc16', // Lime
+    run: aco,
   },
 ];
 

@@ -13,6 +13,7 @@ function GraphCanvas({
   onNodeClick = null,
   onCanvasClick = null,
   onNodeDrag = null,
+  onNodeDragStart = null,
   onAddNode = null,
   onAddEdge = null,
   onDeleteNode = null,
@@ -23,6 +24,7 @@ function GraphCanvas({
   gridInfo = null,
   hasCityMap = false,
   mapStyle = null,
+  osmBounds = null,
   width = 800,
   height = 500,
   // Zoom and pan props for synchronized view
@@ -38,6 +40,111 @@ function GraphCanvas({
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+  
+  // Map tiles state for OSM tiles
+  const [mapTiles, setMapTiles] = useState([]);
+  const [tileInfo, setTileInfo] = useState(null);
+  const tileCache = useRef(new Map());
+
+  // Tile math functions - Web Mercator projection
+  const TILE_SIZE = 256;
+  
+  const lng2tileX = (lng, zoom) => ((lng + 180) / 360) * Math.pow(2, zoom);
+  const lat2tileY = (lat, zoom) => ((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2) * Math.pow(2, zoom);
+  
+  // Load OSM Standard tiles when bounds change
+  useEffect(() => {
+    if (!osmBounds) {
+      setMapTiles([]);
+      setTileInfo(null);
+      return;
+    }
+    
+    // Clear old cache to ensure fresh OSM tiles
+    tileCache.current.clear();
+
+    const { minLat, maxLat, minLng, maxLng } = osmBounds;
+    
+    // Use zoom 18 for high resolution tiles (OSM max is 19)
+    // Higher zoom = more detail but more tiles to load
+    const tileZoom = 18;
+    
+    // Calculate tile coordinates with extra margin for full canvas coverage
+    const marginLat = (maxLat - minLat) * 0.15;
+    const marginLng = (maxLng - minLng) * 0.15;
+    
+    const finalMinTileX = Math.floor(lng2tileX(minLng - marginLng, tileZoom));
+    const finalMaxTileX = Math.ceil(lng2tileX(maxLng + marginLng, tileZoom));
+    const finalMinTileY = Math.floor(lat2tileY(maxLat + marginLat, tileZoom));
+    const finalMaxTileY = Math.ceil(lat2tileY(minLat - marginLat, tileZoom));
+    
+    // Store tile info for rendering
+    const info = {
+      zoom: tileZoom,
+      minTileX: finalMinTileX,
+      maxTileX: finalMaxTileX,
+      minTileY: finalMinTileY,
+      maxTileY: finalMaxTileY,
+      // Precise positions for alignment (use original bounds without margin for graph alignment)
+      startTileX: lng2tileX(minLng, tileZoom),
+      startTileY: lat2tileY(maxLat, tileZoom),
+      endTileX: lng2tileX(maxLng, tileZoom),
+      endTileY: lat2tileY(minLat, tileZoom),
+      bounds: osmBounds,
+    };
+    setTileInfo(info);
+    
+    const tiles = [];
+    
+    // Load all tiles in range
+    for (let x = finalMinTileX; x <= finalMaxTileX; x++) {
+      for (let y = finalMinTileY; y <= finalMaxTileY; y++) {
+        tiles.push({ x, y, zoom: tileZoom });
+      }
+    }
+    
+    console.log(`Loading ${tiles.length} OSM tiles for zoom ${tileZoom}`);
+    
+    // Load tiles from OpenStreetMap
+    const loadTiles = async () => {
+      const loadedTiles = await Promise.all(
+        tiles.map(async (tile) => {
+          const key = `osm/${tile.zoom}/${tile.x}/${tile.y}`;
+          
+          if (tileCache.current.has(key)) {
+            return { ...tile, img: tileCache.current.get(key) };
+          }
+          
+          // Use OpenStreetMap standard tiles
+          // Using multiple tile servers for load balancing
+          const servers = ['a', 'b', 'c'];
+          const server = servers[Math.abs(tile.x + tile.y) % 3];
+          const url = `https://${server}.tile.openstreetmap.org/${tile.zoom}/${tile.x}/${tile.y}.png`;
+          
+          try {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            
+            await new Promise((resolve, reject) => {
+              img.onload = resolve;
+              img.onerror = reject;
+              img.src = url;
+            });
+            
+            tileCache.current.set(key, img);
+            return { ...tile, img };
+          } catch (e) {
+            console.warn(`Failed to load tile ${key}`);
+            return { ...tile, img: null };
+          }
+        })
+      );
+      
+      setMapTiles(loadedTiles.filter(t => t.img));
+    };
+    
+    loadTiles();
+  }, [osmBounds]);
 
   // Colors for different states
   const colors = {
@@ -87,6 +194,24 @@ function GraphCanvas({
       if (!isDirected && path[i] === to && path[i + 1] === from) return true;
     }
     return false;
+  }, [visualizationState, isDirected]);
+
+  // Check if edge has been visited (explored)
+  const isEdgeVisited = useCallback((from, to) => {
+    if (!visualizationState?.visited) return false;
+    const visited = visualizationState.visited;
+    // Edge is visited if both endpoints have been visited
+    return visited.includes(from) && visited.includes(to);
+  }, [visualizationState]);
+
+  // Check if edge is being explored (from current node)
+  const isEdgeExploring = useCallback((from, to) => {
+    if (!visualizationState?.current) return false;
+    const current = visualizationState.current;
+    const frontier = visualizationState.frontier || [];
+    // Edge is exploring if it connects current node to a frontier node
+    return (from === current && frontier.includes(to)) || 
+           (!isDirected && to === current && frontier.includes(from));
   }, [visualizationState, isDirected]);
 
   // Draw arrow for directed edges
@@ -470,74 +595,235 @@ function GraphCanvas({
     ctx.scale(zoom, zoom);
     ctx.translate(-width / 2, -height / 2);
 
-    // Draw backgrounds
-    drawStreetGrid(ctx);
-    drawCityMapBackground(ctx);
-
-    // Calculate offset to center the graph
+    // Calculate offset to center the graph - do this early for tile alignment
     const { offsetX, offsetY } = getGraphOffset();
 
-    // Draw edges
-    for (const edge of graph.edges) {
+    // Determine if this is OSM data (has osmBounds means it came from OSM)
+    const isOSMData = osmBounds != null;
+    const hasTiles = mapTiles.length > 0 && isOSMData;
+    
+    // Calculate scaled canvas bounds for filling
+    // After zoom transform, we need to fill a larger area to cover the visible canvas
+    const scaledWidth = width / zoom;
+    const scaledHeight = height / zoom;
+    const fillOffsetX = (width - scaledWidth) / 2;
+    const fillOffsetY = (height - scaledHeight) / 2;
+    
+    // Draw background based on mode - fill entire visible area
+    if (isOSMData) {
+      // OSM mode: light background
+      ctx.fillStyle = '#e8e4dc';
+    } else {
+      // Normal mode: dark theme background
+      ctx.fillStyle = '#0d1117';
+    }
+    // Fill larger area to account for zoom
+    ctx.fillRect(-width, -height, width * 3, height * 3);
+
+    // Draw OSM tiles if available
+    if (hasTiles && tileInfo) {
+      // Calculate graph bounds in canvas coordinates
+      let graphMinX = Infinity, graphMaxX = -Infinity;
+      let graphMinY = Infinity, graphMaxY = -Infinity;
+      
+      for (const [, node] of graph.nodes) {
+        graphMinX = Math.min(graphMinX, node.x);
+        graphMaxX = Math.max(graphMaxX, node.x);
+        graphMinY = Math.min(graphMinY, node.y);
+        graphMaxY = Math.max(graphMaxY, node.y);
+      }
+      
+      const graphWidth = graphMaxX - graphMinX || 1;
+      const graphHeight = graphMaxY - graphMinY || 1;
+      
+      // Use tile info for alignment
+      const { startTileX, startTileY, endTileX, endTileY } = tileInfo;
+      const tileRangeX = endTileX - startTileX;
+      const tileRangeY = endTileY - startTileY;
+      
+      // Scale: how many canvas pixels per tile unit
+      const scaleX = graphWidth / tileRangeX;
+      const scaleY = graphHeight / tileRangeY;
+      
+      // Draw all tiles - covering the graph area and beyond
+      for (const tile of mapTiles) {
+        if (!tile.img) continue;
+        
+        // Tile's position relative to the start tile
+        const relTileX = tile.x - startTileX;
+        const relTileY = tile.y - startTileY;
+        
+        // Convert to canvas coordinates
+        const tileCanvasX = graphMinX + relTileX * scaleX + offsetX;
+        const tileCanvasY = graphMinY + relTileY * scaleY + offsetY;
+        
+        ctx.drawImage(tile.img, tileCanvasX, tileCanvasY, scaleX, scaleY);
+      }
+    }
+
+    // Draw backgrounds for normal (non-OSM) graphs only
+    if (!isOSMData) {
+      drawStreetGrid(ctx);
+      drawCityMapBackground(ctx);
+    }
+
+    // For OSM: Draw edges in multiple passes for proper layering
+    // Pass 1: Normal edges (bottom layer)
+    // Pass 2: Visited edges
+    // Pass 3: Exploring edges  
+    // Pass 4: Path edges (top layer)
+    
+    const drawOSMEdge = (edge, style) => {
       const fromNode = graph.nodes.get(edge.from);
       const toNode = graph.nodes.get(edge.to);
-      if (!fromNode || !toNode) continue;
-
-      // Apply offset
-      const fromX = fromNode.x + offsetX;
-      const fromY = fromNode.y + offsetY;
-      const toX = toNode.x + offsetX;
-      const toY = toNode.y + offsetY;
-
-      const inPath = isEdgeInPath(edge.from, edge.to);
-      const edgeColor = inPath ? colors.edge.path : colors.edge.default;
-
-      // Edge line
+      if (!fromNode || !toNode) return;
+      
+      const edgeKey = `${edge.from}-${edge.to}`;
+      const geometry = graph.edgeGeometries?.get(edgeKey) || edge.geometry;
+      
       ctx.beginPath();
-      ctx.moveTo(fromX, fromY);
-      ctx.lineTo(toX, toY);
-      ctx.strokeStyle = edgeColor;
-      ctx.lineWidth = inPath ? 5 : 3;
-
-      // Add glow for path edges
-      if (inPath) {
-        ctx.shadowColor = colors.edge.path;
-        ctx.shadowBlur = 8;
+      
+      if (geometry && geometry.length > 1) {
+        // Draw along street geometry
+        ctx.moveTo(geometry[0].x + offsetX, geometry[0].y + offsetY);
+        for (let i = 1; i < geometry.length; i++) {
+          ctx.lineTo(geometry[i].x + offsetX, geometry[i].y + offsetY);
+        }
+      } else {
+        // Fallback: draw straight line between nodes
+        ctx.moveTo(fromNode.x + offsetX, fromNode.y + offsetY);
+        ctx.lineTo(toNode.x + offsetX, toNode.y + offsetY);
       }
+      
+      ctx.strokeStyle = style.color;
+      ctx.lineWidth = style.width;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
       ctx.stroke();
-      ctx.shadowColor = 'transparent';
-      ctx.shadowBlur = 0;
+    };
 
-      // Arrow for directed graph
-      if (isDirected) {
-        drawArrow(ctx, fromX, fromY, toX, toY, edgeColor);
+    if (isOSMData) {
+      // Pass 1: Normal edges - thin but visible
+      for (const edge of graph.edges) {
+        const inPath = isEdgeInPath(edge.from, edge.to);
+        const edgeVisited = isEdgeVisited(edge.from, edge.to);
+        const edgeExploring = isEdgeExploring(edge.from, edge.to);
+        
+        if (!inPath && !edgeVisited && !edgeExploring) {
+          drawOSMEdge(edge, { 
+            color: hasTiles ? 'rgba(71, 85, 105, 0.7)' : 'rgba(100, 116, 139, 0.8)', 
+            width: 1.5 
+          });
+        }
       }
+      
+      // Pass 2: Visited edges (light trail)
+      for (const edge of graph.edges) {
+        const inPath = isEdgeInPath(edge.from, edge.to);
+        const edgeVisited = isEdgeVisited(edge.from, edge.to);
+        const edgeExploring = isEdgeExploring(edge.from, edge.to);
+        
+        if (edgeVisited && !inPath && !edgeExploring) {
+          drawOSMEdge(edge, { color: 'rgba(134, 239, 172, 0.7)', width: 2 });
+        }
+      }
+      
+      // Pass 3: Exploring edges (from current node)
+      for (const edge of graph.edges) {
+        const inPath = isEdgeInPath(edge.from, edge.to);
+        const edgeExploring = isEdgeExploring(edge.from, edge.to);
+        
+        if (edgeExploring && !inPath) {
+          drawOSMEdge(edge, { color: '#fb923c', width: 2.5 });
+        }
+      }
+      
+      // Pass 4: Path edges (final result) - thicker
+      for (const edge of graph.edges) {
+        const inPath = isEdgeInPath(edge.from, edge.to);
+        
+        if (inPath) {
+          drawOSMEdge(edge, { color: '#22c55e', width: 3.5 });
+        }
+      }
+    }
 
-      // Edge weight label
-      const midX = (fromX + toX) / 2;
-      const midY = (fromY + toY) / 2;
+    // Draw edges for non-OSM graphs
+    if (!isOSMData) {
+      for (const edge of graph.edges) {
+        const fromNode = graph.nodes.get(edge.from);
+        const toNode = graph.nodes.get(edge.to);
+        if (!fromNode || !toNode) continue;
 
-      const dx = toX - fromX;
-      const dy = toY - fromY;
-      const len = Math.sqrt(dx * dx + dy * dy);
-      const perpX = len > 0 ? -dy / len * 12 : 0;
-      const perpY = len > 0 ? dx / len * 12 : 0;
+        const fromX = fromNode.x + offsetX;
+        const fromY = fromNode.y + offsetY;
+        const toX = toNode.x + offsetX;
+        const toY = toNode.y + offsetY;
 
-      const labelX = midX + (isDirected ? perpX : 0);
-      const labelY = midY + (isDirected ? perpY : 0);
+        const inPath = isEdgeInPath(edge.from, edge.to);
+        const edgeColor = inPath ? colors.edge.path : colors.edge.default;
 
-      // Background for weight text
-      ctx.fillStyle = inPath ? 'rgba(34, 197, 94, 0.95)' : 'rgba(22, 33, 62, 0.95)';
-      ctx.beginPath();
-      ctx.arc(labelX, labelY, 14, 0, Math.PI * 2);
-      ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(fromX, fromY);
+        ctx.lineTo(toX, toY);
+        
+        if (inPath) {
+          ctx.strokeStyle = colors.edge.path;
+          ctx.lineWidth = 5;
+          ctx.shadowColor = colors.edge.path;
+          ctx.shadowBlur = 6;
+        } else {
+          ctx.strokeStyle = colors.edge.default;
+          ctx.lineWidth = 3;
+        }
+        ctx.stroke();
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
 
-      // Weight text
-      ctx.fillStyle = inPath ? '#ffffff' : colors.text.weight;
-      ctx.font = '11px Inter, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(edge.weight.toString(), labelX, labelY);
+        if (isDirected) {
+          drawArrow(ctx, fromX, fromY, toX, toY, edgeColor);
+        }
+      }
+    }
+
+    // Edge weight labels - only for normal graphs
+    if (!isOSMData) {
+      for (const edge of graph.edges) {
+        const fromNode = graph.nodes.get(edge.from);
+        const toNode = graph.nodes.get(edge.to);
+        if (!fromNode || !toNode) continue;
+
+        const fromX = fromNode.x + offsetX;
+        const fromY = fromNode.y + offsetY;
+        const toX = toNode.x + offsetX;
+        const toY = toNode.y + offsetY;
+        const inPath = isEdgeInPath(edge.from, edge.to);
+
+        const midX = (fromX + toX) / 2;
+        const midY = (fromY + toY) / 2;
+
+        const dx = toX - fromX;
+        const dy = toY - fromY;
+        const len = Math.sqrt(dx * dx + dy * dy);
+        const perpX = len > 0 ? -dy / len * 12 : 0;
+        const perpY = len > 0 ? dx / len * 12 : 0;
+
+        const labelX = midX + (isDirected ? perpX : 0);
+        const labelY = midY + (isDirected ? perpY : 0);
+
+        // Background for weight text
+        ctx.fillStyle = inPath ? 'rgba(34, 197, 94, 0.95)' : 'rgba(22, 33, 62, 0.95)';
+        ctx.beginPath();
+        ctx.arc(labelX, labelY, 14, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Weight text
+        ctx.fillStyle = inPath ? '#ffffff' : colors.text.weight;
+        ctx.font = '11px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(edge.weight.toString(), labelX, labelY);
+      }
     }
 
     // Draw edge being created
@@ -556,6 +842,9 @@ function GraphCanvas({
     }
 
     // Draw nodes
+    const nodeCount = graph.nodes.size;
+    const useSmallNodes = nodeCount > 30;
+    
     for (const [id, node] of graph.nodes) {
       let state = getNodeState(id);
 
@@ -563,16 +852,49 @@ function GraphCanvas({
       else if (id === target) state = 'end';
 
       const color = colors.node[state] || colors.node.default;
-      const radius = state === 'visiting' || (isDragging && dragNode === id) ? 26 : 22;
-
+      const isSpecial = ['visiting', 'path', 'start', 'end', 'frontier'].includes(state);
+      
       // Apply offset
       const nodeX = node.x + offsetX;
       const nodeY = node.y + offsetY;
 
-      // Node glow effect
-      if (['visiting', 'path', 'start', 'end'].includes(state) || (isDragging && dragNode === id)) {
+      let radius;
+      
+      if (isOSMData) {
+        // OSM mode: small but visible nodes
+        if (isSpecial) {
+          // Start/End nodes: small markers
+          if (state === 'start' || state === 'end') {
+            radius = 2;
+          } else if (state === 'path') {
+            radius = 1;
+          } else if (state === 'visiting') {
+            radius = 2; // Current exploring node - more visible
+          } else if (state === 'frontier') {
+            radius = 1.5; // Frontier nodes - visible but smaller
+          } else {
+            radius = 0.8;
+          }
+        } else {
+          // Draw intersection nodes as tiny visible dots
+          ctx.beginPath();
+          ctx.arc(nodeX, nodeY, 0.5, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(59, 130, 246, 0.6)';
+          ctx.fill();
+          continue;
+        }
+      } else {
+        // Normal mode: standard node sizes
+        const baseRadius = useSmallNodes ? 6 : 22;
+        radius = isSpecial 
+          ? (useSmallNodes ? 10 : 26)
+          : (isDragging && dragNode === id ? baseRadius + 4 : baseRadius);
+      }
+
+      // Node glow effect for special/dragging nodes
+      if (isSpecial || (isDragging && dragNode === id)) {
         ctx.shadowColor = color;
-        ctx.shadowBlur = 15;
+        ctx.shadowBlur = isOSMData ? 2 : (useSmallNodes ? 10 : 15);
       }
 
       // Node circle
@@ -581,7 +903,7 @@ function GraphCanvas({
 
       // Gradient fill
       const gradient = ctx.createRadialGradient(
-        nodeX - 5, nodeY - 5, 0,
+        nodeX - 2, nodeY - 2, 0,
         nodeX, nodeY, radius
       );
       gradient.addColorStop(0, lightenColor(color, 20));
@@ -591,24 +913,37 @@ function GraphCanvas({
 
       // Border
       ctx.strokeStyle = lightenColor(color, 30);
-      ctx.lineWidth = 2;
+      ctx.lineWidth = isOSMData ? 0.5 : (useSmallNodes ? 1 : 2);
       ctx.stroke();
 
       // Reset shadow
       ctx.shadowColor = 'transparent';
       ctx.shadowBlur = 0;
 
-      // Node label
-      ctx.fillStyle = colors.text.default;
-      ctx.font = 'bold 12px Inter, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(node.label || id, nodeX, nodeY);
+      // Node label - only for non-OSM or very special nodes
+      if (isSpecial && !isOSMData) {
+        ctx.fillStyle = colors.text.default;
+        ctx.font = `bold ${useSmallNodes ? '9px' : '12px'} Inter, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        if (state === 'start') {
+          ctx.fillText('S', nodeX, nodeY);
+        } else if (state === 'end') {
+          ctx.fillText('T', nodeX, nodeY);
+        }
+      } else if (!useSmallNodes && !isOSMData) {
+        ctx.fillStyle = colors.text.default;
+        ctx.font = 'bold 12px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const label = node.label || id;
+        ctx.fillText(label, nodeX, nodeY);
+      }
     }
 
     ctx.restore(); // Restore zoom/pan transform
     ctx.restore(); // Restore dpr scale
-  }, [graph, visualizationState, source, target, getNodeState, isEdgeInPath, isDirected, drawArrow, drawStreetGrid, drawCityMapBackground, getGraphOffset, colors, isDragging, dragNode, edgeStart, mousePos, zoom, pan, width, height]);
+  }, [graph, visualizationState, source, target, getNodeState, isEdgeInPath, isEdgeVisited, isEdgeExploring, isDirected, drawArrow, drawStreetGrid, drawCityMapBackground, getGraphOffset, colors, isDragging, dragNode, edgeStart, mousePos, zoom, pan, width, height, mapTiles, osmBounds, tileInfo]);
 
   // Canvas resize and setup
   useEffect(() => {
@@ -643,19 +978,32 @@ function GraphCanvas({
     const { offsetX, offsetY } = getGraphOffset();
     const { x, y } = screenToGraph(screenX, screenY);
     
+    // Determine if OSM map for hit radius calculation
+    const isOSMMap = (graph.edgeGeometries && graph.edgeGeometries.size > 0) || graph.nodes.size > 50;
+    
     for (const [id, node] of graph.nodes) {
       const nodeX = node.x + offsetX;
       const nodeY = node.y + offsetY;
       const dx = x - nodeX;
       const dy = y - nodeY;
-      // Adjust hit radius based on zoom
-      const hitRadius = 22 / zoom;
+      
+      // Hit radius based on node type - much smaller for OSM maps
+      // For OSM: only special nodes should be easily clickable
+      const isSpecial = id === source || id === target;
+      let hitRadius;
+      if (isOSMMap) {
+        hitRadius = isSpecial ? 8 : 3; // Small hit area for OSM nodes
+      } else {
+        hitRadius = 22; // Normal hit area
+      }
+      hitRadius = hitRadius / zoom;
+      
       if (dx * dx + dy * dy <= hitRadius * hitRadius * zoom * zoom) {
         return id;
       }
     }
     return null;
-  }, [graph, getGraphOffset, screenToGraph, zoom]);
+  }, [graph, getGraphOffset, screenToGraph, zoom, source, target]);
 
   // Get edge at position (check if point is near edge line)
   const getEdgeAt = useCallback((screenX, screenY) => {
@@ -718,6 +1066,8 @@ function GraphCanvas({
       setEdgeStart(nodeId);
       setMousePos({ x: screenX, y: screenY });
     } else if (editorMode === 'view' && nodeId) {
+      // Call onNodeDragStart before starting drag (for undo history)
+      if (onNodeDragStart) onNodeDragStart();
       setIsDragging(true);
       setDragNode(nodeId);
     } else if (editorMode === 'view' && !nodeId && e.button === 0) {
@@ -824,9 +1174,10 @@ function GraphCanvas({
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    // Calculate zoom factor
+    // Calculate zoom factor - allow up to 20x zoom for OSM data
+    const maxZoom = osmBounds ? 20 : 5;
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    const newZoom = Math.max(0.2, Math.min(5, zoom * delta));
+    const newZoom = Math.max(0.2, Math.min(maxZoom, zoom * delta));
 
     // Adjust pan to zoom towards mouse position
     if (onPanChange) {
@@ -877,11 +1228,25 @@ function GraphCanvas({
           {visualizationState.message}
         </div>
       )}
+      {/* OSM Info badge */}
+      {osmBounds && (
+        <div className="osm-info-badge">
+          <span>📍 {graph?.nodes?.size || 0} nodes · {graph?.edges?.length || 0} edges</span>
+          {osmBounds && (
+            <span className="coords">
+              {osmBounds.minLat.toFixed(4)}°N, {osmBounds.minLng.toFixed(4)}°E
+            </span>
+          )}
+        </div>
+      )}
       {/* Zoom controls */}
       <div className="zoom-controls">
         <button 
           className="zoom-btn"
-          onClick={() => onZoomChange && onZoomChange(Math.min(5, zoom * 1.2))}
+          onClick={() => {
+            const maxZoom = osmBounds ? 20 : 5;
+            onZoomChange && onZoomChange(Math.min(maxZoom, zoom * 1.3));
+          }}
           title="Zoom In"
         >
           +
@@ -898,7 +1263,7 @@ function GraphCanvas({
         </button>
         <button 
           className="zoom-btn"
-          onClick={() => onZoomChange && onZoomChange(Math.max(0.2, zoom / 1.2))}
+          onClick={() => onZoomChange && onZoomChange(Math.max(0.2, zoom / 1.3))}
           title="Zoom Out"
         >
           −
@@ -910,7 +1275,7 @@ function GraphCanvas({
       {!isDirected && (
         <div className="graph-type-badge undirected">Undirected</div>
       )}
-      {(showStreetGrid || hasCityMap) && (
+      {(showStreetGrid || hasCityMap) && !osmBounds && (
         <div className="graph-type-badge city-map">🗺️ City Map</div>
       )}
     </div>
