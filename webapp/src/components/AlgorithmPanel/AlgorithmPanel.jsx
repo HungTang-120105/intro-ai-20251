@@ -9,6 +9,8 @@ function AlgorithmPanel({
   onAlgorithmToggle,
   onRunAll,
   disabled = false,
+  acoParams = {},
+  onAcoParamsChange = null,
 }) {
   const handleToggle = (algorithmId) => {
     if (disabled) return;
@@ -19,6 +21,14 @@ function AlgorithmPanel({
       onAlgorithmToggle([...selectedAlgorithms, algorithmId]);
     }
   };
+
+  const handleAcoParamChange = (param, value) => {
+    if (onAcoParamsChange) {
+      onAcoParamsChange({ ...acoParams, [param]: parseFloat(value) });
+    }
+  };
+
+  const isAcoSelected = selectedAlgorithms.includes('aco');
 
   return (
     <div className="algorithm-panel">
@@ -53,6 +63,71 @@ function AlgorithmPanel({
           </div>
         ))}
       </div>
+
+      {/* ACO Parameters */}
+      {isAcoSelected && (
+        <div className="aco-params">
+          <div className="aco-params-title">🐜 ACO Parameters</div>
+          <div className="aco-param-row">
+            <label>Iterations:</label>
+            <input
+              type="number"
+              min="10"
+              max="200"
+              value={acoParams.maxIterations || 50}
+              onChange={(e) => handleAcoParamChange('maxIterations', e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+          <div className="aco-param-row">
+            <label>Ants:</label>
+            <input
+              type="number"
+              min="5"
+              max="50"
+              value={acoParams.numAnts || 10}
+              onChange={(e) => handleAcoParamChange('numAnts', e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+          <div className="aco-param-row">
+            <label>α (pheromone):</label>
+            <input
+              type="number"
+              min="0.1"
+              max="5"
+              step="0.1"
+              value={acoParams.alpha || 1.0}
+              onChange={(e) => handleAcoParamChange('alpha', e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+          <div className="aco-param-row">
+            <label>β (heuristic):</label>
+            <input
+              type="number"
+              min="0.1"
+              max="5"
+              step="0.1"
+              value={acoParams.beta || 2.0}
+              onChange={(e) => handleAcoParamChange('beta', e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+          <div className="aco-param-row">
+            <label>Evaporation:</label>
+            <input
+              type="number"
+              min="0.1"
+              max="0.9"
+              step="0.1"
+              value={acoParams.evaporationRate || 0.5}
+              onChange={(e) => handleAcoParamChange('evaporationRate', e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        </div>
+      )}
 
       <button
         className="btn btn-primary btn-run-all"

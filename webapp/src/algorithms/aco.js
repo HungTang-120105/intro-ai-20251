@@ -207,6 +207,7 @@ export function aco(graph, source, target, isDirected = false, options = {}) {
     return {
       path: bestPath,
       cost: bestLength,
+      found: true,
       steps,
       visitOrder,
       nodesVisited: visitOrder.length,
@@ -225,6 +226,7 @@ export function aco(graph, source, target, isDirected = false, options = {}) {
   return {
     path: null,
     cost: Infinity,
+    found: false,
     steps,
     visitOrder,
     nodesVisited: visitOrder.length,

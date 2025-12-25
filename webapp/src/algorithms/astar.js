@@ -67,10 +67,10 @@ class PriorityQueue {
  * @param {string} source - Source node id
  * @param {string} target - Target node id
  * @param {boolean} isDirected - Whether the graph is directed
- * @param {Function} heuristic - Heuristic function h(node, target)
+ * @param {Object} options - Options object (can contain custom heuristic)
  * @returns {Object} - Result with path, cost, steps, and visited order
  */
-export function astar(graph, source, target, isDirected = false, heuristic = null) {
+export function astar(graph, source, target, isDirected = false, options = {}) {
   const steps = [];
   const gScore = new Map(); // Cost from start
   const fScore = new Map(); // Estimated total cost
@@ -79,8 +79,11 @@ export function astar(graph, source, target, isDirected = false, heuristic = nul
   const pq = new PriorityQueue();
   const visitOrder = [];
 
+  // Extract heuristic from options or use default
+  let heuristic = typeof options === 'function' ? options : options?.heuristic;
+  
   // Default heuristic: Euclidean distance
-  if (!heuristic) {
+  if (!heuristic || typeof heuristic !== 'function') {
     heuristic = (node) => euclideanDistance(graph, node, target) * 0.5;
   }
 

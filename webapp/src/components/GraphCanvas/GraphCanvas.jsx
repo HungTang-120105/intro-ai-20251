@@ -550,8 +550,9 @@ function GraphCanvas({
   const getGraphOffset = useCallback(() => {
     if (!graph || graph.nodes.size === 0) return { offsetX: 0, offsetY: 0 };
     
-    // Don't center if it's a street grid (has fixed layout)
-    if (showStreetGrid) return { offsetX: 0, offsetY: 0 };
+    // Don't center if it's a street grid (has fixed layout) - but DO center for OSM maps
+    // OSM maps use showStreetGrid for geometry display but still need centering
+    if (showStreetGrid && !osmBounds) return { offsetX: 0, offsetY: 0 };
     
     let minX = Infinity, maxX = -Infinity;
     let minY = Infinity, maxY = -Infinity;
@@ -567,11 +568,14 @@ function GraphCanvas({
     const graphHeight = maxY - minY;
     const padding = 50; // padding around graph
     
+    // Calculate offset to center graph in canvas
+    // Note: zoom transform centers on canvas center, so offset calculation
+    // should be based on canvas center coordinates
     const offsetX = (width - graphWidth) / 2 - minX + padding / 2;
     const offsetY = (height - graphHeight) / 2 - minY + padding / 2;
     
     return { offsetX, offsetY };
-  }, [graph, width, height, showStreetGrid]);
+  }, [graph, width, height, showStreetGrid, osmBounds]);
 
   // Draw function
   const draw = useCallback(() => {
@@ -1165,7 +1169,7 @@ function GraphCanvas({
     }
   }, [graph, getNodeAt, getEdgeAt, onDeleteNode, onDeleteEdge]);
 
-  // Wheel handler for zoom
+  // Wheel handler for zoom - zoom towards mouse cursor
   const handleWheel = useCallback((e) => {
     e.preventDefault();
     if (!onZoomChange) return;
@@ -1179,16 +1183,31 @@ function GraphCanvas({
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
     const newZoom = Math.max(0.2, Math.min(maxZoom, zoom * delta));
 
-    // Adjust pan to zoom towards mouse position
+    // Zoom towards mouse position
+    // The transform is: translate(pan) -> translate(center) -> scale(zoom) -> translate(-center)
+    // So world point at screen (mouseX, mouseY) is: 
+    //   worldX = (mouseX - pan.x - width/2) / zoom + width/2
+    //   worldY = (mouseY - pan.y - height/2) / zoom + height/2
+    // After zoom change, we want the same world point to stay under the mouse:
+    //   mouseX = worldX * newZoom - width/2 * newZoom + width/2 + newPanX
+    //   newPanX = mouseX - (worldX - width/2) * newZoom - width/2
     if (onPanChange) {
-      const zoomRatio = newZoom / zoom;
-      const newPanX = mouseX - (mouseX - pan.x) * zoomRatio;
-      const newPanY = mouseY - (mouseY - pan.y) * zoomRatio;
+      const centerX = width / 2;
+      const centerY = height / 2;
+      
+      // World coordinates under mouse cursor
+      const worldX = (mouseX - pan.x - centerX) / zoom + centerX;
+      const worldY = (mouseY - pan.y - centerY) / zoom + centerY;
+      
+      // New pan to keep world point under mouse
+      const newPanX = mouseX - (worldX - centerX) * newZoom - centerX;
+      const newPanY = mouseY - (worldY - centerY) * newZoom - centerY;
+      
       onPanChange({ x: newPanX, y: newPanY });
     }
 
     onZoomChange(newZoom);
-  }, [zoom, pan, onZoomChange, onPanChange]);
+  }, [zoom, pan, width, height, onZoomChange, onPanChange, osmBounds]);
 
   // Add wheel event listener (need to use native to prevent default)
   useEffect(() => {

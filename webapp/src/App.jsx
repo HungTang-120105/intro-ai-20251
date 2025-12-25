@@ -63,6 +63,15 @@ function App() {
   const [currentSteps, setCurrentSteps] = useState({});
   const [activeAlgorithmIndex, setActiveAlgorithmIndex] = useState(0); // Which algorithm to visualize
 
+  // ACO parameters
+  const [acoParams, setAcoParams] = useState({
+    maxIterations: 50,
+    numAnts: 10,
+    alpha: 1.0,
+    beta: 2.0,
+    evaporationRate: 0.5,
+  });
+
   // Playback state
   const [isPlaying, setIsPlaying] = useState(false);
   const [speed, setSpeed] = useState(400);
@@ -125,6 +134,10 @@ function App() {
       // Clear OSM bounds when switching to sample graph
       setOsmBounds(null);
       
+      // Reset zoom and pan for sample graphs
+      setZoom(1);
+      setPan({ x: 0, y: 0 });
+      
       setResults([]);
       setCurrentSteps({});
       setIsPlaying(false);
@@ -159,18 +172,47 @@ function App() {
     setActiveAlgorithmIndex(0); // Reset to first algorithm
 
     const newResults = selectedAlgorithms.map(algoId => {
-      return runAlgorithm(algoId, graph, source, target, isDirected);
+      // Pass ACO params for ACO algorithm
+      const options = algoId === 'aco' ? acoParams : {};
+      return runAlgorithm(algoId, graph, source, target, isDirected, options);
     });
 
     setResults(newResults);
 
-    // Initialize step counters
+    // Initialize step counters to 0, then auto-play
     const initialSteps = {};
     newResults.forEach(r => {
       initialSteps[r.algorithmId] = 0;
     });
     setCurrentSteps(initialSteps);
-  }, [graph, source, target, selectedAlgorithms]);
+    
+    // Auto-start playing after a short delay
+    setTimeout(() => setIsPlaying(true), 100);
+  }, [graph, source, target, selectedAlgorithms, isDirected, acoParams]);
+
+  // Jump to end - show final result immediately
+  const handleJumpToEnd = useCallback(() => {
+    setIsPlaying(false);
+    setCurrentSteps(prev => {
+      const next = { ...prev };
+      for (const result of results) {
+        next[result.algorithmId] = result.steps.length - 1;
+      }
+      return next;
+    });
+  }, [results]);
+
+  // Jump to start - reset visualization
+  const handleJumpToStart = useCallback(() => {
+    setIsPlaying(false);
+    setCurrentSteps(prev => {
+      const next = { ...prev };
+      for (const result of results) {
+        next[result.algorithmId] = 0;
+      }
+      return next;
+    });
+  }, [results]);
 
   // Playback controls
   const handlePlay = useCallback(() => {
@@ -541,6 +583,8 @@ function App() {
       }
       
       // Set default zoom to 500% for OSM maps
+      // Graph will be centered by getGraphOffset in GraphCanvas
+      // Pan = {0, 0} means zoom happens around canvas center where graph is centered
       setZoom(5);
       setPan({ x: 0, y: 0 });
       
@@ -701,6 +745,8 @@ function App() {
           onAlgorithmToggle={setSelectedAlgorithms}
           onRunAll={handleRunAll}
           disabled={!graph || !source || !target}
+          acoParams={acoParams}
+          onAcoParamsChange={setAcoParams}
         />
       </aside>
 
@@ -816,6 +862,8 @@ function App() {
             onStepBackward={handleStepBackward}
             onReset={handleReset}
             onSpeedChange={setSpeed}
+            onJumpToEnd={handleJumpToEnd}
+            onJumpToStart={handleJumpToStart}
             disabled={results.length === 0}
             results={results}
             activeAlgorithmIndex={activeAlgorithmIndex}

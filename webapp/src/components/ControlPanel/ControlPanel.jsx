@@ -27,6 +27,8 @@ function ControlPanel({
   onStepBackward,
   onReset,
   onSpeedChange,
+  onJumpToEnd,
+  onJumpToStart,
   disabled = false,
   // Multi-algorithm support
   results = [],
@@ -72,9 +74,9 @@ function ControlPanel({
       <div className="control-buttons">
         <button
           className="btn btn-icon btn-secondary"
-          onClick={onReset}
+          onClick={onJumpToStart}
           disabled={disabled || currentStep === 0}
-          title="Reset"
+          title="Jump to Start"
         >
           ⏮
         </button>
@@ -108,12 +110,7 @@ function ControlPanel({
 
         <button
           className="btn btn-icon btn-secondary"
-          onClick={() => {
-            // Jump to end
-            while (currentStep < totalSteps - 1) {
-              onStepForward();
-            }
-          }}
+          onClick={onJumpToEnd}
           disabled={disabled || currentStep >= totalSteps - 1}
           title="Jump to End"
         >

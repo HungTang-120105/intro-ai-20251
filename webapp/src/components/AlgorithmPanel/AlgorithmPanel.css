@@ -46,3 +46,50 @@
   text-align: center;
   margin-top: 8px;
 }
+
+/* ACO Parameters */
+.aco-params {
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 8px;
+}
+
+.aco-params-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+}
+
+.aco-param-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.aco-param-row:last-child {
+  margin-bottom: 0;
+}
+
+.aco-param-row label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.aco-param-row input {
+  width: 70px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  text-align: right;
+}
+
+.aco-param-row input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}

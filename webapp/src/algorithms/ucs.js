@@ -137,6 +137,7 @@ export function ucs(graph, source, target, isDirected = false) {
       return {
         path,
         cost: currentCost,
+        found: true,
         steps,
         visitOrder,
         nodesVisited: visited.size,
@@ -184,6 +185,7 @@ export function ucs(graph, source, target, isDirected = false) {
   return {
     path: null,
     cost: Infinity,
+    found: false,
     steps,
     visitOrder,
     nodesVisited: visited.size,
