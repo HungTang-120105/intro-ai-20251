@@ -11,6 +11,10 @@ function AlgorithmPanel({
   disabled = false,
   acoParams = {},
   onAcoParamsChange = null,
+  lbsParams = {},
+  onLbsParamsChange = null,
+  dlsParams = {},
+  onDlsParamsChange = null,
 }) {
   const handleToggle = (algorithmId) => {
     if (disabled) return;
@@ -28,7 +32,27 @@ function AlgorithmPanel({
     }
   };
 
+  const handleLbsParamChange = (param, value) => {
+    if (onLbsParamsChange) {
+      const numValue = parseInt(value, 10);
+      if (!isNaN(numValue) && numValue >= 1) {
+        onLbsParamsChange({ ...lbsParams, [param]: numValue });
+      }
+    }
+  };
+
+  const handleDlsParamChange = (param, value) => {
+    if (onDlsParamsChange) {
+      const numValue = parseInt(value, 10);
+      if (!isNaN(numValue) && numValue >= 1) {
+        onDlsParamsChange({ ...dlsParams, [param]: numValue });
+      }
+    }
+  };
+
   const isAcoSelected = selectedAlgorithms.includes('aco');
+  const isLbsSelected = selectedAlgorithms.includes('local-beam');
+  const isDlsSelected = selectedAlgorithms.includes('dls');
 
   return (
     <div className="algorithm-panel">
@@ -123,6 +147,42 @@ function AlgorithmPanel({
               step="0.1"
               value={acoParams.evaporationRate || 0.5}
               onChange={(e) => handleAcoParamChange('evaporationRate', e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Local Beam Search Parameters */}
+      {isLbsSelected && (
+        <div className="aco-params" onClick={(e) => e.stopPropagation()}>
+          <div className="aco-params-title">🔦 Local Beam Search Parameters</div>
+          <div className="aco-param-row">
+            <label>Beam Width (k):</label>
+            <input
+              type="number"
+              min="1"
+              max="20"
+              value={lbsParams.beamWidth || 3}
+              onChange={(e) => handleLbsParamChange('beamWidth', e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* DLS Parameters */}
+      {isDlsSelected && (
+        <div className="aco-params" onClick={(e) => e.stopPropagation()}>
+          <div className="aco-params-title">📏 DLS Parameters</div>
+          <div className="aco-param-row">
+            <label>Depth Limit:</label>
+            <input
+              type="number"
+              min="1"
+              max="100"
+              value={dlsParams.depthLimit || 50}
+              onChange={(e) => handleDlsParamChange('depthLimit', e.target.value)}
               onClick={(e) => e.stopPropagation()}
             />
           </div>

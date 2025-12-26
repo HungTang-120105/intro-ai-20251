@@ -72,6 +72,16 @@ function App() {
     evaporationRate: 0.5,
   });
 
+  // Local Beam Search parameters
+  const [lbsParams, setLbsParams] = useState({
+    beamWidth: 3,
+  });
+
+  // DLS parameters
+  const [dlsParams, setDlsParams] = useState({
+    depthLimit: 50,
+  });
+
   // Playback state
   const [isPlaying, setIsPlaying] = useState(false);
   const [speed, setSpeed] = useState(400);
@@ -172,8 +182,11 @@ function App() {
     setActiveAlgorithmIndex(0); // Reset to first algorithm
 
     const newResults = selectedAlgorithms.map(algoId => {
-      // Pass ACO params for ACO algorithm
-      const options = algoId === 'aco' ? acoParams : {};
+      // Pass params for algorithms that need them
+      let options = {};
+      if (algoId === 'aco') options = acoParams;
+      else if (algoId === 'local-beam') options = lbsParams;
+      else if (algoId === 'dls') options = dlsParams;
       return runAlgorithm(algoId, graph, source, target, isDirected, options);
     });
 
@@ -188,7 +201,7 @@ function App() {
     
     // Auto-start playing after a short delay
     setTimeout(() => setIsPlaying(true), 100);
-  }, [graph, source, target, selectedAlgorithms, isDirected, acoParams]);
+  }, [graph, source, target, selectedAlgorithms, isDirected, acoParams, lbsParams, dlsParams]);
 
   // Jump to end - show final result immediately
   const handleJumpToEnd = useCallback(() => {
@@ -747,6 +760,10 @@ function App() {
           disabled={!graph || !source || !target}
           acoParams={acoParams}
           onAcoParamsChange={setAcoParams}
+          lbsParams={lbsParams}
+          onLbsParamsChange={setLbsParams}
+          dlsParams={dlsParams}
+          onDlsParamsChange={setDlsParams}
         />
       </aside>
 
