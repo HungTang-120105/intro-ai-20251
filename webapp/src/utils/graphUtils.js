@@ -269,7 +269,7 @@ export const heuristicStrategies = [
 export function createHeuristic(strategyId, graph, target, scale = 0.5) {
   switch (strategyId) {
     case 'haversine':
-      return (node) => haversineDistance(graph, node, target) * scale;
+      return (node) => haversineDistance(graph, node, target) /* * scale */;
     case 'euclidean':
       return (node) => euclideanDistance(graph, node, target) * scale;
     case 'manhattan':
@@ -281,9 +281,9 @@ export function createHeuristic(strategyId, graph, target, scale = 0.5) {
     case 'zero':
       return () => 0;
     case 'greedy':
-      return (node) => haversineDistance(graph, node, target) * scale * 2; // Non-admissible
+      return (node) => haversineDistance(graph, node, target) /* * scale */ * 2; // Non-admissible
     default:
-      return (node) => haversineDistance(graph, node, target) * scale;
+      return (node) => haversineDistance(graph, node, target) /* * scale */;
   }
 }
 
