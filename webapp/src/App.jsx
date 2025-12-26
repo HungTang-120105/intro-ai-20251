@@ -82,6 +82,11 @@ function App() {
     depthLimit: 50,
   });
 
+  // Heuristic parameters (for A*, LPA*, Local Beam Search)
+  const [heuristicParams, setHeuristicParams] = useState({
+    heuristicStrategy: 'euclidean',
+  });
+
   // Playback state
   const [isPlaying, setIsPlaying] = useState(false);
   const [speed, setSpeed] = useState(400);
@@ -173,6 +178,9 @@ function App() {
     return getVisualizationStateForIndex(activeAlgorithmIndex);
   }, [getVisualizationStateForIndex, activeAlgorithmIndex]);
 
+  // Algorithms that use heuristics
+  const heuristicAlgorithms = ['astar', 'lpastar', 'local-beam'];
+
   // Run selected algorithms
   const handleRunAll = useCallback(() => {
     if (!graph || !source || !target || selectedAlgorithms.length === 0) return;
@@ -184,9 +192,15 @@ function App() {
     const newResults = selectedAlgorithms.map(algoId => {
       // Pass params for algorithms that need them
       let options = {};
-      if (algoId === 'aco') options = acoParams;
-      else if (algoId === 'local-beam') options = lbsParams;
-      else if (algoId === 'dls') options = dlsParams;
+      if (algoId === 'aco') {
+        options = acoParams;
+      } else if (algoId === 'local-beam') {
+        options = { ...lbsParams, ...heuristicParams };
+      } else if (algoId === 'dls') {
+        options = dlsParams;
+      } else if (heuristicAlgorithms.includes(algoId)) {
+        options = heuristicParams;
+      }
       return runAlgorithm(algoId, graph, source, target, isDirected, options);
     });
 
@@ -201,7 +215,7 @@ function App() {
     
     // Auto-start playing after a short delay
     setTimeout(() => setIsPlaying(true), 100);
-  }, [graph, source, target, selectedAlgorithms, isDirected, acoParams, lbsParams, dlsParams]);
+  }, [graph, source, target, selectedAlgorithms, isDirected, acoParams, lbsParams, dlsParams, heuristicParams]);
 
   // Jump to end - show final result immediately
   const handleJumpToEnd = useCallback(() => {
@@ -764,6 +778,8 @@ function App() {
           onLbsParamsChange={setLbsParams}
           dlsParams={dlsParams}
           onDlsParamsChange={setDlsParams}
+          heuristicParams={heuristicParams}
+          onHeuristicParamsChange={setHeuristicParams}
         />
       </aside>
 

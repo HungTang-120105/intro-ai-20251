@@ -1,6 +1,6 @@
 // A* Search algorithm with step-by-step visualization
 
-import { getNeighbors, euclideanDistance } from '../utils/graphUtils';
+import { getNeighbors, euclideanDistance, createHeuristic } from '../utils/graphUtils';
 
 /**
  * Min-heap priority queue implementation
@@ -67,7 +67,7 @@ class PriorityQueue {
  * @param {string} source - Source node id
  * @param {string} target - Target node id
  * @param {boolean} isDirected - Whether the graph is directed
- * @param {Object} options - Options object (can contain custom heuristic)
+ * @param {Object} options - Options object (can contain custom heuristic or heuristicStrategy)
  * @returns {Object} - Result with path, cost, steps, and visited order
  */
 export function astar(graph, source, target, isDirected = false, options = {}) {
@@ -79,12 +79,17 @@ export function astar(graph, source, target, isDirected = false, options = {}) {
   const pq = new PriorityQueue();
   const visitOrder = [];
 
-  // Extract heuristic from options or use default
-  let heuristic = typeof options === 'function' ? options : options?.heuristic;
+  // Extract heuristic from options
+  let heuristic;
+  const heuristicStrategy = options?.heuristicStrategy || 'euclidean';
   
-  // Default heuristic: Euclidean distance
-  if (!heuristic || typeof heuristic !== 'function') {
-    heuristic = (node) => euclideanDistance(graph, node, target) * 0.5;
+  if (typeof options === 'function') {
+    heuristic = options;
+  } else if (options?.heuristic && typeof options.heuristic === 'function') {
+    heuristic = options.heuristic;
+  } else {
+    // Create heuristic from strategy
+    heuristic = createHeuristic(heuristicStrategy, graph, target);
   }
 
   // Initialize
@@ -107,7 +112,8 @@ export function astar(graph, source, target, isDirected = false, options = {}) {
     visited: [...visited],
     frontier: pq.toArray(),
     parent: Object.fromEntries(parent),
-    message: `Starting A* from node ${source} to ${target}`,
+    heuristicStrategy,
+    message: `Starting A* from node ${source} to ${target} (heuristic: ${heuristicStrategy})`,
   });
 
   while (!pq.isEmpty()) {

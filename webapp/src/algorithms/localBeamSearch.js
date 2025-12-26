@@ -1,6 +1,6 @@
 // Local Beam Search algorithm with step-by-step visualization
 
-import { getNeighbors, euclideanDistance } from '../utils/graphUtils';
+import { getNeighbors, euclideanDistance, createHeuristic } from '../utils/graphUtils';
 
 /**
  * Local Beam Search algorithm implementation with event emission for visualization
@@ -9,7 +9,7 @@ import { getNeighbors, euclideanDistance } from '../utils/graphUtils';
  * @param {string} source - Source node id
  * @param {string} target - Target node id
  * @param {boolean} isDirected - Whether the graph is directed
- * @param {Object} options - Options object (can contain beamWidth, heuristic)
+ * @param {Object} options - Options object (can contain beamWidth, heuristic, heuristicStrategy)
  * @returns {Object} - Result with path, cost, steps, and visited order
  */
 export function localBeamSearch(graph, source, target, isDirected = false, options = {}) {
@@ -18,12 +18,17 @@ export function localBeamSearch(graph, source, target, isDirected = false, optio
   const parent = new Map();
   const visitOrder = [];
 
-  // Extract heuristic from options or use default
-  let heuristic = typeof options === 'function' ? options : options?.heuristic;
+  // Extract heuristic from options
+  let heuristic;
+  const heuristicStrategy = options?.heuristicStrategy || 'euclidean';
   
-  // Default heuristic: Euclidean distance to target
-  if (!heuristic || typeof heuristic !== 'function') {
-    heuristic = (node) => euclideanDistance(graph, node, target);
+  if (typeof options === 'function') {
+    heuristic = options;
+  } else if (options?.heuristic && typeof options.heuristic === 'function') {
+    heuristic = options.heuristic;
+  } else {
+    // Create heuristic from strategy (scale = 1 for beam search since we only use h)
+    heuristic = createHeuristic(heuristicStrategy, graph, target, 1);
   }
 
   // Initialize priority queue with source node
@@ -40,7 +45,8 @@ export function localBeamSearch(graph, source, target, isDirected = false, optio
     frontier: pq.map(b => b.node),
     beamWidth,
     parent: Object.fromEntries(parent),
-    message: `Starting Local Beam Search from ${source} to ${target} with beam width k=${beamWidth}`,
+    heuristicStrategy,
+    message: `Starting Local Beam Search from ${source} to ${target} with beam width k=${beamWidth} (heuristic: ${heuristicStrategy})`,
   });
 
   while (pq.length > 0) {

@@ -1,4 +1,5 @@
 import { algorithms } from '../../algorithms';
+import { heuristicStrategies } from '../../utils/graphUtils';
 import './AlgorithmPanel.css';
 
 /**
@@ -15,6 +16,8 @@ function AlgorithmPanel({
   onLbsParamsChange = null,
   dlsParams = {},
   onDlsParamsChange = null,
+  heuristicParams = {},
+  onHeuristicParamsChange = null,
 }) {
   const handleToggle = (algorithmId) => {
     if (disabled) return;
@@ -50,9 +53,19 @@ function AlgorithmPanel({
     }
   };
 
+  const handleHeuristicChange = (value) => {
+    if (onHeuristicParamsChange) {
+      onHeuristicParamsChange({ ...heuristicParams, heuristicStrategy: value });
+    }
+  };
+
   const isAcoSelected = selectedAlgorithms.includes('aco');
   const isLbsSelected = selectedAlgorithms.includes('local-beam');
   const isDlsSelected = selectedAlgorithms.includes('dls');
+  
+  // Algorithms that use heuristics
+  const heuristicAlgorithms = ['astar', 'lpastar', 'local-beam'];
+  const isHeuristicAlgorithmSelected = selectedAlgorithms.some(id => heuristicAlgorithms.includes(id));
 
   return (
     <div className="algorithm-panel">
@@ -87,6 +100,41 @@ function AlgorithmPanel({
           </div>
         ))}
       </div>
+
+      {/* Heuristic Strategy Selection */}
+      {isHeuristicAlgorithmSelected && (
+        <div className="aco-params" onClick={(e) => e.stopPropagation()}>
+          <div className="aco-params-title">🎯 Heuristic Strategy</div>
+          <div className="heuristic-info">
+            <small>Used by: {selectedAlgorithms.filter(id => heuristicAlgorithms.includes(id)).map(id => {
+              const algo = algorithms.find(a => a.id === id);
+              return algo?.name || id;
+            }).join(', ')}</small>
+          </div>
+          <div className="heuristic-select-row">
+            <select
+              value={heuristicParams.heuristicStrategy || 'euclidean'}
+              onChange={(e) => handleHeuristicChange(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              className="heuristic-select"
+            >
+              {heuristicStrategies.map(h => (
+                <option key={h.id} value={h.id}>
+                  {h.name} {!h.optimal && '⚠️'}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="heuristic-description">
+            {heuristicStrategies.find(h => h.id === (heuristicParams.heuristicStrategy || 'euclidean'))?.description}
+          </div>
+          {!heuristicStrategies.find(h => h.id === (heuristicParams.heuristicStrategy || 'euclidean'))?.optimal && (
+            <div className="heuristic-warning">
+              ⚠️ Non-admissible heuristic - may not find optimal path
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ACO Parameters */}
       {isAcoSelected && (

@@ -1,7 +1,7 @@
 // Lifelong Planning A* (LPA*) implementation
 // An incremental version of A* that can efficiently update when the graph changes
 
-import { getNeighbors } from '../utils/graphUtils';
+import { getNeighbors, createHeuristic } from '../utils/graphUtils';
 
 /**
  * Priority Queue for LPA*
@@ -94,31 +94,22 @@ class PriorityQueue {
 }
 
 /**
- * Heuristic function - Euclidean distance
- */
-function defaultHeuristic(graph, u, target) {
-  const nodeU = graph.nodes.get(u);
-  const nodeT = graph.nodes.get(target);
-  if (nodeU && nodeT) {
-    const dx = (nodeU.x || 0) - (nodeT.x || 0);
-    const dy = (nodeU.y || 0) - (nodeT.y || 0);
-    return Math.sqrt(dx * dx + dy * dy) * 0.01;
-  }
-  return 0;
-}
-
-/**
  * LPA* implementation - simpler Dijkstra-based approach for reliability
  * @param {Object} graph - Graph object with nodes and edges
  * @param {string} source - Source node id  
  * @param {string} target - Target node id
  * @param {boolean} isDirected - Whether the graph is directed
+ * @param {Object} options - Options object (can contain heuristicStrategy)
  * @returns {Object} - Result with path, cost, steps
  */
-export function lpaStar(graph, source, target, isDirected = false) {
+export function lpaStar(graph, source, target, isDirected = false, options = {}) {
   const steps = [];
   const visitOrder = [];
   const INF = Infinity;
+  
+  // Extract heuristic strategy from options
+  const heuristicStrategy = options?.heuristicStrategy || 'euclidean';
+  const heuristic = createHeuristic(heuristicStrategy, graph, target, 0.01);
 
   // Get edge weight
   const getWeight = (u, v) => {
@@ -176,7 +167,7 @@ export function lpaStar(graph, source, target, isDirected = false) {
     const gU = g.get(u);
     const rhsU = rhs.get(u);
     const minVal = Math.min(gU, rhsU);
-    const h = defaultHeuristic(graph, u, target);
+    const h = heuristic(u);
     return [minVal + h, minVal];
   };
 
@@ -189,7 +180,8 @@ export function lpaStar(graph, source, target, isDirected = false) {
     current: null,
     visited: [],
     frontier: [source],
-    message: `LPA* starting from ${source} to ${target}`,
+    heuristicStrategy,
+    message: `LPA* starting from ${source} to ${target} (heuristic: ${heuristicStrategy})`,
   });
 
   let iterations = 0;

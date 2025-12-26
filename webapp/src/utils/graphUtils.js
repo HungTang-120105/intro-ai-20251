@@ -149,6 +149,104 @@ export function manhattanDistance(graph, nodeA, nodeB) {
 }
 
 /**
+ * Calculate Chebyshev distance (diagonal distance) between two nodes
+ */
+export function chebyshevDistance(graph, nodeA, nodeB) {
+  const a = graph.nodes.get(nodeA);
+  const b = graph.nodes.get(nodeB);
+  if (!a || !b) return Infinity;
+  return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+}
+
+/**
+ * Calculate Octile distance (diagonal movement with cost √2)
+ */
+export function octileDistance(graph, nodeA, nodeB) {
+  const a = graph.nodes.get(nodeA);
+  const b = graph.nodes.get(nodeB);
+  if (!a || !b) return Infinity;
+  const dx = Math.abs(a.x - b.x);
+  const dy = Math.abs(a.y - b.y);
+  return Math.max(dx, dy) + (Math.SQRT2 - 1) * Math.min(dx, dy);
+}
+
+/**
+ * Zero heuristic (turns A* into Dijkstra)
+ */
+export function zeroHeuristic() {
+  return 0;
+}
+
+/**
+ * Available heuristic strategies
+ */
+export const heuristicStrategies = [
+  {
+    id: 'euclidean',
+    name: 'Euclidean',
+    description: 'Straight-line distance (√((x₂-x₁)² + (y₂-y₁)²))',
+    optimal: true,
+  },
+  {
+    id: 'manhattan',
+    name: 'Manhattan',
+    description: 'City-block distance (|x₂-x₁| + |y₂-y₁|)',
+    optimal: true,
+  },
+  {
+    id: 'chebyshev',
+    name: 'Chebyshev',
+    description: 'Max of horizontal/vertical distance',
+    optimal: true,
+  },
+  {
+    id: 'octile',
+    name: 'Octile',
+    description: 'Diagonal distance with √2 diagonal cost',
+    optimal: true,
+  },
+  {
+    id: 'zero',
+    name: 'Zero (Dijkstra)',
+    description: 'No heuristic - behaves like Dijkstra',
+    optimal: true,
+  },
+  {
+    id: 'greedy',
+    name: 'Greedy (2x Euclidean)',
+    description: 'Non-admissible - faster but may not find optimal',
+    optimal: false,
+  },
+];
+
+/**
+ * Create heuristic function based on strategy
+ * @param {string} strategyId - Heuristic strategy identifier
+ * @param {Object} graph - Graph object
+ * @param {string} target - Target node id
+ * @param {number} scale - Scale factor for the heuristic (default 0.5 for edge weight normalization)
+ * @returns {Function} - Heuristic function that takes a node and returns estimated cost
+ */
+export function createHeuristic(strategyId, graph, target, scale = 0.5) {
+  switch (strategyId) {
+    case 'euclidean':
+      return (node) => euclideanDistance(graph, node, target) * scale;
+    case 'manhattan':
+      return (node) => manhattanDistance(graph, node, target) * scale;
+    case 'chebyshev':
+      return (node) => chebyshevDistance(graph, node, target) * scale;
+    case 'octile':
+      return (node) => octileDistance(graph, node, target) * scale;
+    case 'zero':
+      return () => 0;
+    case 'greedy':
+      return (node) => euclideanDistance(graph, node, target) * scale * 2; // Non-admissible
+    default:
+      return (node) => euclideanDistance(graph, node, target) * scale;
+  }
+}
+
+/**
  * Generate random position within bounds
  */
 export function randomPosition(minX, maxX, minY, maxY) {

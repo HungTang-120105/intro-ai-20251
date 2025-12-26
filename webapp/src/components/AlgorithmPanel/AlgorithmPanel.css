@@ -93,3 +93,45 @@
   outline: none;
   border-color: var(--accent-primary);
 }
+
+/* Heuristic Selection */
+.heuristic-info {
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.heuristic-select-row {
+  margin-bottom: 8px;
+}
+
+.heuristic-select {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.heuristic-select:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.heuristic-description {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 4px 0;
+}
+
+.heuristic-warning {
+  font-size: 0.75rem;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
+  padding: 6px 8px;
+  border-radius: 4px;
+  margin-top: 6px;
+}
