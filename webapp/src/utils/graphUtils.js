@@ -171,6 +171,39 @@ export function octileDistance(graph, nodeA, nodeB) {
 }
 
 /**
+ * Calculate Haversine distance between two nodes using real geographic coordinates (lat/lng)
+ * Returns distance in meters
+ * @param {Object} graph - Graph object with nodes containing lat/lng properties
+ * @param {string} nodeA - Node A ID
+ * @param {string} nodeB - Node B ID
+ * @returns {number} Distance in meters
+ */
+export function haversineDistance(graph, nodeA, nodeB) {
+  const a = graph.nodes.get(nodeA);
+  const b = graph.nodes.get(nodeB);
+  if (!a || !b) return Infinity;
+
+  // Use lat/lng if available (from OSM data), otherwise fallback to x/y
+  const lat1 = a.lat ?? a.y;
+  const lng1 = a.lng ?? a.x;
+  const lat2 = b.lat ?? b.y;
+  const lng2 = b.lng ?? b.x;
+
+  const R = 6371000; // Earth radius in meters
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLng = (lng2 - lng1) * (Math.PI / 180);
+
+  const sinDLat = Math.sin(dLat / 2);
+  const sinDLng = Math.sin(dLng / 2);
+  const a_hav = sinDLat * sinDLat +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+    sinDLng * sinDLng;
+
+  const c = 2 * Math.atan2(Math.sqrt(a_hav), Math.sqrt(1 - a_hav));
+  return R * c;
+}
+
+/**
  * Zero heuristic (turns A* into Dijkstra)
  */
 export function zeroHeuristic() {
@@ -182,9 +215,15 @@ export function zeroHeuristic() {
  */
 export const heuristicStrategies = [
   {
+    id: 'haversine',
+    name: 'Haversine (Real Distance)',
+    description: 'Real-world distance using lat/lng (meters) - recommended for OSM graphs',
+    optimal: true,
+  },
+  {
     id: 'euclidean',
-    name: 'Euclidean',
-    description: 'Straight-line distance (√((x₂-x₁)² + (y₂-y₁)²))',
+    name: 'Euclidean (Canvas)',
+    description: 'Straight-line distance on canvas (√((x₂-x₁)² + (y₂-y₁)²))',
     optimal: true,
   },
   {
@@ -213,7 +252,7 @@ export const heuristicStrategies = [
   },
   {
     id: 'greedy',
-    name: 'Greedy (2x Euclidean)',
+    name: 'Greedy (2x Haversine)',
     description: 'Non-admissible - faster but may not find optimal',
     optimal: false,
   },
@@ -229,6 +268,8 @@ export const heuristicStrategies = [
  */
 export function createHeuristic(strategyId, graph, target, scale = 0.5) {
   switch (strategyId) {
+    case 'haversine':
+      return (node) => haversineDistance(graph, node, target) * scale;
     case 'euclidean':
       return (node) => euclideanDistance(graph, node, target) * scale;
     case 'manhattan':
@@ -240,9 +281,9 @@ export function createHeuristic(strategyId, graph, target, scale = 0.5) {
     case 'zero':
       return () => 0;
     case 'greedy':
-      return (node) => euclideanDistance(graph, node, target) * scale * 2; // Non-admissible
+      return (node) => haversineDistance(graph, node, target) * scale * 2; // Non-admissible
     default:
-      return (node) => euclideanDistance(graph, node, target) * scale;
+      return (node) => haversineDistance(graph, node, target) * scale;
   }
 }
 
