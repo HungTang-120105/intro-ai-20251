@@ -401,7 +401,10 @@ function App() {
       // Pass direction info to updateEdgeCost if supported, or handle logic here
       // The current updateEdgeCost takes (from, to, weight, blocked)
 
-      if (action === 'block' || action === 'block-both') {
+      if (action === 'block-both') {
+        state.updateEdgeCost(from, to, Infinity, true);
+        state.updateEdgeCost(to, from, Infinity, true);
+      } else if (action === 'block') {
         state.updateEdgeCost(from, to, Infinity, true);
         if (!isDirected) state.updateEdgeCost(to, from, Infinity, true);
       } else if (action === 'block-forward') {
@@ -409,9 +412,20 @@ function App() {
       } else if (action === 'block-reverse') {
         state.updateEdgeCost(to, from, Infinity, true);
       } else {
-        // Unblock or change weight - applies to potentially both if undirected
+        // Unblock or change weight
+        // If unblocking/changing, we should check if we need to update the reverse direction too
         state.updateEdgeCost(from, to, finalWeight, isBlocked);
-        if (!isDirected) state.updateEdgeCost(to, from, finalWeight, isBlocked);
+
+        // For undirected graphs OR if we have a reverse edge (OSM), update valid reverse edges
+        // We can safely try updating reverse if it exists in the algorithm's graph, 
+        // but checking graph.edges is safer to match app state. 
+        // For simplicity here: if it's undirected OR (directed and we are unblocking a potentially blocked reverse edge)
+        // Ideally we'd track 'isReverseBlocked' separately but for 'unblock' we generally want to reset both if they exist.
+        // Let's check graph edges existence to be safe.
+        const hasReverse = graph.edges.some(e => e.from === to && e.to === from);
+        if (!isDirected || hasReverse) {
+          state.updateEdgeCost(to, from, finalWeight, isBlocked);
+        }
       }
 
       const startTime = performance.now();
