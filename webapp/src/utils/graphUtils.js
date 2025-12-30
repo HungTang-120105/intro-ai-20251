@@ -60,6 +60,7 @@ export function removeEdge(graph, from, to) {
 export function getNeighbors(graph, nodeId, isDirected = false) {
   const neighbors = [];
   for (const edge of graph.edges) {
+    if (edge.blocked) continue;
     if (edge.from === nodeId) {
       neighbors.push({ node: edge.to, weight: edge.weight });
     } else if (!isDirected && edge.to === nodeId) {
@@ -303,13 +304,13 @@ export function randomPosition(minX, maxX, minY, maxY) {
 export function autoLayout(graph, width, height, iterations = 100) {
   const nodes = Array.from(graph.nodes.values());
   const k = Math.sqrt((width * height) / nodes.length);
-  
+
   // Initialize random positions if not set
   for (const node of nodes) {
     if (node.x === undefined) node.x = Math.random() * width;
     if (node.y === undefined) node.y = Math.random() * height;
   }
-  
+
   // Simple force-directed layout
   for (let iter = 0; iter < iterations; iter++) {
     // Repulsive forces between all nodes
@@ -327,7 +328,7 @@ export function autoLayout(graph, width, height, iterations = 100) {
         nodes[j].y += fy * 0.1;
       }
     }
-    
+
     // Attractive forces along edges
     for (const edge of graph.edges) {
       const a = graph.nodes.get(edge.from);
@@ -344,7 +345,7 @@ export function autoLayout(graph, width, height, iterations = 100) {
       b.x -= fx * 0.05;
       b.y -= fy * 0.05;
     }
-    
+
     // Keep nodes within bounds
     const padding = 50;
     for (const node of nodes) {
@@ -352,6 +353,6 @@ export function autoLayout(graph, width, height, iterations = 100) {
       node.y = Math.max(padding, Math.min(height - padding, node.y));
     }
   }
-  
+
   return graph;
 }

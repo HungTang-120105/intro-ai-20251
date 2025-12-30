@@ -35,6 +35,12 @@ function AlgorithmPanel({
     }
   };
 
+  const handleAcoParamToggle = (param, value) => {
+    if (onAcoParamsChange) {
+      onAcoParamsChange({ ...acoParams, [param]: value });
+    }
+  };
+
   const handleLbsParamChange = (param, value) => {
     if (onLbsParamsChange) {
       const numValue = parseInt(value, 10);
@@ -197,6 +203,20 @@ function AlgorithmPanel({
               onChange={(e) => handleAcoParamChange('evaporationRate', e.target.value)}
               onClick={(e) => e.stopPropagation()}
             />
+          </div>
+          <div className="aco-checkbox-row">
+            <label>
+              <input
+                type="checkbox"
+                checked={acoParams.logAnts || false}
+                onChange={(e) => handleAcoParamToggle('logAnts', e.target.checked)}
+                onClick={(e) => e.stopPropagation()}
+              />
+              Log ants (detailed)
+            </label>
+          </div>
+          <div className="aco-param-hint">
+            Large graphs may slow down when detailed logging is enabled.
           </div>
         </div>
       )}

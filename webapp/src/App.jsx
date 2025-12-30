@@ -3,6 +3,7 @@ import GraphCanvas from './components/GraphCanvas';
 import AlgorithmPanel from './components/AlgorithmPanel';
 import ControlPanel from './components/ControlPanel';
 import StatisticsPanel from './components/StatisticsPanel';
+import AcoTracePanel from './components/AcoTracePanel';
 import GraphSelector from './components/GraphSelector';
 import GraphEditor from './components/GraphEditor';
 import OSMSelector from './components/OSMSelector';
@@ -70,6 +71,7 @@ function App() {
     alpha: 1.0,
     beta: 2.0,
     evaporationRate: 0.5,
+    logAnts: false,
   });
 
   // Local Beam Search parameters
@@ -204,7 +206,7 @@ function App() {
       // Pass params for algorithms that need them
       let options = {};
       if (algoId === 'aco') {
-        options = acoParams;
+        options = { ...acoParams, ...heuristicParams };
       } else if (algoId === 'local-beam') {
         options = { ...lbsParams, ...heuristicParams };
       } else if (algoId === 'dls') {
@@ -1021,6 +1023,7 @@ function App() {
   const activeResult = results[activeAlgorithmIndex] || results[0];
   const totalSteps = activeResult ? activeResult.steps.length : 0;
   const currentStep = activeResult ? (currentSteps[activeResult.algorithmId] || 0) : 0;
+  const activeStep = activeResult ? activeResult.steps[currentStep] : null;
 
   return (
     <div className="app">
@@ -1275,6 +1278,16 @@ function App() {
           results={results}
           currentSteps={currentSteps}
         />
+
+        {activeResult?.algorithmId === 'aco' && (
+          <div className="card">
+            <AcoTracePanel
+              result={activeResult}
+              step={activeStep}
+              logEnabled={acoParams.logAnts}
+            />
+          </div>
+        )}
       </aside>
 
       {/* Edge Weight Change Modal */}

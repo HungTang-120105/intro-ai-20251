@@ -94,6 +94,27 @@
   border-color: var(--accent-primary);
 }
 
+.aco-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.aco-checkbox-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.aco-param-hint {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
 /* Heuristic Selection */
 .heuristic-info {
   color: var(--text-muted);
