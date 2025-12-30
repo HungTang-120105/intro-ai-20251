@@ -138,6 +138,9 @@ export class DStarLiteState {
     // Priority queue
     this.U = new DStarPriorityQueue();
 
+    // Parent pointers for optional invalidation on blocked edges
+    this.parent = new Map();
+
     // Steps for visualization - MUST be initialized BEFORE initialize()
     this.steps = [];
     this.visitOrder = [];
@@ -214,16 +217,25 @@ export class DStarLiteState {
   }
 
   updateVertex(u) {
-    if (u !== this.target) {
+    if (u === this.target) {
+      this.parent.delete(u);
+    } else {
       // rhs(u) = min over successors s of (c(u,s) + g(s))
       let minRhs = this.INF;
+      let bestSucc = null;
       for (const { node: s, weight } of this.getSuccessors(u)) {
         const val = weight + this.g.get(s);
         if (val < minRhs) {
           minRhs = val;
+          bestSucc = s;
         }
       }
       this.rhs.set(u, minRhs);
+      if (bestSucc !== null && isFinite(minRhs)) {
+        this.parent.set(u, bestSucc);
+      } else {
+        this.parent.delete(u);
+      }
     }
 
     // Remove u from queue if present
@@ -421,6 +433,41 @@ export class DStarLiteState {
     const affectedNodes = new Set();
     affectedNodes.add(from);
     affectedNodes.add(to);
+
+    // If cost increases or edge is blocked, invalidate nodes that depended on this edge
+    const costIncreased = isBlocked || newWeight > oldWeight;
+    if (costIncreased) {
+      const queue = [];
+      const invalidated = new Set();
+
+      if (this.parent.get(from) === to) {
+        queue.push(from);
+        invalidated.add(from);
+      }
+      if (!this.isDirected && this.parent.get(to) === from) {
+        queue.push(to);
+        invalidated.add(to);
+      }
+
+      while (queue.length > 0) {
+        const node = queue.shift();
+        if (node === this.target) continue;
+
+        this.g.set(node, this.INF);
+        this.parent.delete(node);
+
+        for (const [childNode, parentNode] of this.parent.entries()) {
+          if (parentNode === node && !invalidated.has(childNode)) {
+            invalidated.add(childNode);
+            queue.push(childNode);
+          }
+        }
+      }
+
+      for (const node of invalidated) {
+        affectedNodes.add(node);
+      }
+    }
 
     // For blocked edges, we need to invalidate all nodes that might have used this edge
     // in their path to the target. In D* Lite, we search from target to source,

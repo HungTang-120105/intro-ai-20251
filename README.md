@@ -44,6 +44,10 @@ Sau đó vào tab OSM trong webapp để tải dữ liệu bản đồ thật.
 
 ![](webapp/screenshots/img2.png)
 
+<!-- ![](webapp/screenshots/record.mp4) -->
+[![](webapp/screenshots/img2.png)](https://drive.google.com/file/d/1dsSUVKZWpTT4x4lsrr-ZTmg14rdWG4ln/preview)
+<!-- <iframe src="" width="640" height="480"></iframe> -->
+
 ## Ghi chú
 - Nếu không chạy backend OSM, bạn vẫn có thể dùng các đồ thị mẫu.
 - Lần đầu tải OSM có thể chậm do OSMnx cần tải và cache dữ liệu.
