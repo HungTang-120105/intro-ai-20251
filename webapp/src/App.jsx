@@ -92,6 +92,7 @@ function App() {
   const [algorithmStates, setAlgorithmStates] = useState({}); // Store algorithm state objects for replanning
   const [blockedEdges, setBlockedEdges] = useState(new Set()); // Track blocked edges
   const [edgeWeightModal, setEdgeWeightModal] = useState(null); // { from, to, currentWeight }
+  const [replanVersion, setReplanVersion] = useState(0); // Force re-render after replan
 
   // Playback state
   const [isPlaying, setIsPlaying] = useState(false);
@@ -120,7 +121,7 @@ function App() {
 
     updateCanvasSize();
     window.addEventListener('resize', updateCanvasSize);
-    
+
     // Also update after a short delay (for initial render)
     const timeout = setTimeout(updateCanvasSize, 100);
 
@@ -129,7 +130,7 @@ function App() {
       clearTimeout(timeout);
     };
   }, []);
-  
+
   // City map state
   const [showStreetGrid, setShowStreetGrid] = useState(false);
   const [gridInfo, setGridInfo] = useState(null);
@@ -145,20 +146,20 @@ function App() {
       setSource(result.source);
       setTarget(result.target);
       setIsDirected(result.isDirected || graphConfig.isDirected || false);
-      
+
       // Set city map properties
       setShowStreetGrid(result.hasStreetGrid || graphConfig.hasStreetGrid || false);
       setGridInfo(result.gridInfo || null);
       setHasCityMap(result.hasCityMap || graphConfig.hasCityMap || false);
       setMapStyle(result.mapStyle || null);
-      
+
       // Clear OSM bounds when switching to sample graph
       setOsmBounds(null);
-      
+
       // Reset zoom and pan for sample graphs
       setZoom(1);
       setPan({ x: 0, y: 0 });
-      
+
       setResults([]);
       setCurrentSteps({});
       setIsPlaying(false);
@@ -172,12 +173,12 @@ function App() {
 
     const result = results[index];
     if (!result) return null;
-    
+
     const stepIndex = currentSteps[result.algorithmId] || 0;
     const step = result.steps[stepIndex];
 
     return step || null;
-  }, [results, currentSteps]);
+  }, [results, currentSteps, replanVersion]); // replanVersion forces re-creation after replan
 
   // Get current visualization state for active algorithm (for single view)
   const getVisualizationState = useCallback(() => {
@@ -186,7 +187,7 @@ function App() {
 
   // Algorithms that use heuristics
   const heuristicAlgorithms = ['astar', 'lpastar', 'dstarlite', 'local-beam'];
-  
+
   // Algorithms that support incremental replanning
   const incrementalAlgorithms = ['lpastar', 'dstarlite'];
 
@@ -237,7 +238,7 @@ function App() {
     });
 
     setResults(newResults);
-    
+
     // Store algorithm states for incremental updates
     const newAlgorithmStates = {};
     newResults.forEach(r => {
@@ -253,11 +254,11 @@ function App() {
       initialSteps[r.algorithmId] = 0;
     });
     setCurrentSteps(initialSteps);
-    
+
     // Enable incremental mode if any incremental algorithm is selected
     const hasIncrementalAlgo = selectedAlgorithms.some(id => incrementalAlgorithms.includes(id));
     setIncrementalMode(hasIncrementalAlgo);
-    
+
     // Auto-start playing after a short delay
     setTimeout(() => setIsPlaying(true), 100);
   }, [graph, source, target, selectedAlgorithms, isDirected, acoParams, lbsParams, dlsParams, heuristicParams, incrementalAlgorithms]);
@@ -265,19 +266,19 @@ function App() {
   // Handle edge click in incremental mode - show modal for weight change
   const handleEdgeBlock = useCallback((from, to) => {
     if (!incrementalMode || Object.keys(algorithmStates).length === 0) return;
-    
+
     // Find the edge in the graph to get current weight
-    const edge = graph.edges.find(e => 
-      (e.from === from && e.to === to) || 
+    const edge = graph.edges.find(e =>
+      (e.from === from && e.to === to) ||
       (!isDirected && e.from === to && e.to === from)
     );
-    
+
     if (!edge) return;
-    
+
     const edgeKey = `${from}-${to}`;
     const reverseKey = `${to}-${from}`;
     const isCurrentlyBlocked = blockedEdges.has(edgeKey) || blockedEdges.has(reverseKey);
-    
+
     // Open modal to let user choose action
     setEdgeWeightModal({
       from,
@@ -285,43 +286,51 @@ function App() {
       currentWeight: edge.weight,
       originalWeight: edge.originalWeight || edge.weight,
       isBlocked: isCurrentlyBlocked,
+      edgeDirection: !isDirected ? 'both' : 'forward', // Detect if undirected/bidirectional
     });
   }, [incrementalMode, algorithmStates, blockedEdges, isDirected, graph]);
 
   // Apply edge change (block, unblock, or change weight)
   const handleApplyEdgeChange = useCallback((action, newWeight = null) => {
     if (!edgeWeightModal) return;
-    
+
     const { from, to, originalWeight } = edgeWeightModal;
     const edgeKey = `${from}-${to}`;
     const reverseKey = `${to}-${from}`;
-    
+
     // Find the edge
-    const edge = graph.edges.find(e => 
-      (e.from === from && e.to === to) || 
+    const edge = graph.edges.find(e =>
+      (e.from === from && e.to === to) ||
       (!isDirected && e.from === to && e.to === from)
     );
-    
+
     if (!edge) {
       setEdgeWeightModal(null);
       return;
     }
-    
+
     // Store original weight if not already stored
     if (!edge.originalWeight) {
       edge.originalWeight = edge.weight;
     }
-    
+
     let finalWeight = edge.weight;
     let isBlocked = false;
-    
-    if (action === 'block') {
+
+    if (action.startsWith('block')) {
       finalWeight = Infinity;
       isBlocked = true;
       setBlockedEdges(prev => {
         const next = new Set(prev);
-        next.add(edgeKey);
-        if (!isDirected) next.add(reverseKey);
+        // Handle specific directions
+        if (action === 'block' || action === 'block-both') {
+          next.add(edgeKey);
+          next.add(reverseKey);
+        } else if (action === 'block-forward') {
+          next.add(edgeKey);
+        } else if (action === 'block-reverse') {
+          next.add(reverseKey);
+        }
         return next;
       });
     } else if (action === 'unblock') {
@@ -349,40 +358,98 @@ function App() {
       // Update edge weight in graph
       edge.weight = finalWeight;
     }
-    
+
     // Update algorithm states and replan
+    // Also update the edge in the main graph for non-incremental algos
+    // Note: This logic assumes simple graph model where edge object is shared or we block by modifying weight
+    // Ideally we should have separate edge objects for each direction if we want to support one-way blocking in undirected graph visualization
+    // But currently undirected edges are stored as one object. 
+    // For visualization purposes, if we block one direction, we might need to rely on `blockedEdges` set which GraphCanvas uses.
+
+    if (action.startsWith('block')) {
+      edge.blocked = true;
+      edge.weight = Infinity;
+    } else if (action === 'unblock') {
+      edge.blocked = false;
+      edge.weight = originalWeight;
+    } else {
+      edge.blocked = false;
+    }
+
+    if (Object.keys(algorithmStates).length === 0) {
+      setEdgeWeightModal(null);
+      return;
+    }
+
     const updatedResults = [];
     const updatedStates = { ...algorithmStates };
-    
+
+    // Capture current step counts BEFORE replanning (as replan mutates the steps array)
+    const preReplanCounts = {};
     for (const [algoId, state] of Object.entries(algorithmStates)) {
-      state.updateEdgeCost(from, to, finalWeight, isBlocked);
-      
+      const currentState = results.find(r => r.algorithmId === algoId);
+      preReplanCounts[algoId] = currentState ? currentState.steps.length : 0;
+    }
+
+    for (const [algoId, state] of Object.entries(algorithmStates)) {
+      // Pass direction info to updateEdgeCost if supported, or handle logic here
+      // The current updateEdgeCost takes (from, to, weight, blocked)
+
+      if (action === 'block' || action === 'block-both') {
+        state.updateEdgeCost(from, to, Infinity, true);
+        if (!isDirected) state.updateEdgeCost(to, from, Infinity, true);
+      } else if (action === 'block-forward') {
+        state.updateEdgeCost(from, to, Infinity, true);
+      } else if (action === 'block-reverse') {
+        state.updateEdgeCost(to, from, Infinity, true);
+      } else {
+        // Unblock or change weight - applies to potentially both if undirected
+        state.updateEdgeCost(from, to, finalWeight, isBlocked);
+        if (!isDirected) state.updateEdgeCost(to, from, finalWeight, isBlocked);
+      }
+
       const startTime = performance.now();
       const result = state.replan();
       const endTime = performance.now();
-      
+
       result.algorithmId = algoId;
       result.algorithmName = algoId === 'lpastar' ? 'LPA*' : 'D* Lite';
       result.executionTime = endTime - startTime;
       updatedResults.push(result);
       updatedStates[algoId] = result.state;
     }
-    
-    const nonIncrementalResults = results.filter(r => !incrementalAlgorithms.includes(r.algorithmId));
-    
-    setResults([...updatedResults, ...nonIncrementalResults]);
-    setAlgorithmStates(updatedStates);
-    
-    const newSteps = {};
-    updatedResults.forEach(r => {
-      newSteps[r.algorithmId] = r.steps.length - 1;
+
+    // Merge results: update incremental ones, keep non-incremental ones in original order
+    const mergedResults = results.map(r => {
+      const updated = updatedResults.find(ur => ur.algorithmId === r.algorithmId);
+      return updated || r;
     });
-    nonIncrementalResults.forEach(r => {
-      newSteps[r.algorithmId] = currentSteps[r.algorithmId] || r.steps.length - 1;
+
+    // Stop any current playback first
+    setIsPlaying(false);
+
+    // Update algorithm states and close modal
+    setAlgorithmStates(updatedStates);
+    setEdgeWeightModal(null);
+
+    // Update results
+    setResults(mergedResults);
+
+    // Update step counters to show replan process
+    const newSteps = {};
+    mergedResults.forEach(r => {
+      // Use captured count minus 1 to start before new steps
+      if (updatedResults.some(ur => ur.algorithmId === r.algorithmId)) {
+        newSteps[r.algorithmId] = Math.max(0, (preReplanCounts[r.algorithmId] || 0) - 1);
+      } else {
+        newSteps[r.algorithmId] = r.steps.length - 1;
+      }
     });
     setCurrentSteps(newSteps);
-    
-    setEdgeWeightModal(null);
+    setReplanVersion(v => v + 1);
+
+    // Auto-play the replanning
+    setTimeout(() => setIsPlaying(true), 100);
   }, [edgeWeightModal, algorithmStates, isDirected, results, currentSteps, incrementalAlgorithms, graph]);
 
   // Jump to end - show final result immediately
@@ -485,6 +552,9 @@ function App() {
     };
   }, [isPlaying, speed, results]);
 
+  // Note: pendingReplanPlayback useEffect removed - we now set currentSteps directly
+  // in handleApplyEdgeChange to avoid stale closure issues
+
   // Push state to history for undo/redo
   const pushToHistory = useCallback((graphState) => {
     setHistory(prev => {
@@ -509,16 +579,16 @@ function App() {
   // Undo function
   const handleUndo = useCallback(() => {
     if (historyIndex <= 0 || history.length === 0) return;
-    
+
     const newIndex = historyIndex - 1;
     const state = JSON.parse(history[newIndex]);
-    
+
     const restoredGraph = {
       nodes: new Map(state.nodes),
       edges: state.edges,
       edgeGeometries: state.edgeGeometries ? new Map(state.edgeGeometries) : new Map()
     };
-    
+
     setGraph(restoredGraph);
     setHistoryIndex(newIndex);
   }, [history, historyIndex]);
@@ -526,16 +596,16 @@ function App() {
   // Redo function
   const handleRedo = useCallback(() => {
     if (historyIndex >= history.length - 1) return;
-    
+
     const newIndex = historyIndex + 1;
     const state = JSON.parse(history[newIndex]);
-    
+
     const restoredGraph = {
       nodes: new Map(state.nodes),
       edges: state.edges,
       edgeGeometries: state.edgeGeometries ? new Map(state.edgeGeometries) : new Map()
     };
-    
+
     setGraph(restoredGraph);
     setHistoryIndex(newIndex);
   }, [history, historyIndex]);
@@ -581,6 +651,81 @@ function App() {
     }
   }, [graph, pushToHistory]);
 
+  // Helper function to update running incremental algorithms
+  const updateIncrementalAlgorithms = useCallback((from, to, weight, isBlocked) => {
+    if (Object.keys(algorithmStates).length === 0) return;
+
+    const updatedResults = [];
+    const updatedStates = { ...algorithmStates };
+    let hasUpdates = false;
+
+    // Capture current step counts BEFORE replanning
+    const preReplanCounts = {};
+    for (const [algoId, state] of Object.entries(algorithmStates)) {
+      const currentState = results.find(r => r.algorithmId === algoId);
+      preReplanCounts[algoId] = currentState ? currentState.steps.length : 0;
+    }
+
+    // Iterate through all running algorithms
+    for (const [algoId, state] of Object.entries(algorithmStates)) {
+      // For Add Edge: if edge doesn't exist in algorithm's graph, we need to add it
+      // This is tricky because the algo state has its own graph reference or copy
+      // But usually they share the node objects but might have copied edge lists
+
+      // Let's check if the edge exists
+      let edge = state.graph.edges.find(e =>
+        (e.from === from && e.to === to) ||
+        (!isDirected && e.from === to && e.to === from)
+      );
+
+      if (!edge && !isBlocked) {
+        // Warning: Direct mutation of internal graph state
+        // This is necessary because the algorithm instance is already created
+        state.graph.edges.push({ from, to, weight, blocked: false });
+      }
+
+      // Now update the cost
+      state.updateEdgeCost(from, to, weight, isBlocked);
+
+      const startTime = performance.now();
+      const result = state.replan();
+      const endTime = performance.now();
+
+      result.algorithmId = algoId;
+      result.algorithmName = algoId === 'lpastar' ? 'LPA*' : 'D* Lite';
+      result.executionTime = endTime - startTime;
+      updatedResults.push(result);
+      updatedStates[algoId] = result.state;
+      hasUpdates = true;
+    }
+
+    if (hasUpdates) {
+      // Merge results
+      const mergedResults = results.map(r => {
+        const updated = updatedResults.find(ur => ur.algorithmId === r.algorithmId);
+        return updated || r;
+      });
+
+      setAlgorithmStates(updatedStates);
+      setResults(mergedResults);
+
+      // Update step counters to show replan process
+      const newSteps = {};
+      mergedResults.forEach(r => {
+        if (updatedResults.some(ur => ur.algorithmId === r.algorithmId)) {
+          newSteps[r.algorithmId] = Math.max(0, (preReplanCounts[r.algorithmId] || 0) - 1);
+        } else {
+          newSteps[r.algorithmId] = r.steps.length - 1;
+        }
+      });
+      setCurrentSteps(newSteps);
+      setReplanVersion(v => v + 1);
+
+      // Auto-play the replanning
+      setTimeout(() => setIsPlaying(true), 100);
+    }
+  }, [algorithmStates, isDirected, results]);
+
   // Add node handler
   const handleAddNode = useCallback((x, y) => {
     if (!graph) return;
@@ -623,15 +768,18 @@ function App() {
     });
 
     // Don't clear results - allow editing while viewing parallel comparison
-  }, [graph, isDirected, pushToHistory]);
+
+    // Update incremental algorithms if running
+    updateIncrementalAlgorithms(from, to, weight, false);
+  }, [graph, isDirected, pushToHistory, updateIncrementalAlgorithms]);
 
   // Delete node handler
   const handleDeleteNode = useCallback((nodeId) => {
     if (!graph) return;
-    
+
     // Save current state for undo
     pushToHistory(graph);
-    
+
     // If deleting source or target, clear them
     if (nodeId === source) {
       setSource(null);
@@ -666,7 +814,10 @@ function App() {
     });
 
     // Don't clear results - allow editing while viewing parallel comparison
-  }, [graph, isDirected, pushToHistory]);
+
+    // Update incremental algorithms (mark as blocked)
+    updateIncrementalAlgorithms(from, to, Infinity, true);
+  }, [graph, isDirected, pushToHistory, updateIncrementalAlgorithms]);
 
   // Clear graph handler
   const handleClearGraph = useCallback(() => {
@@ -705,10 +856,10 @@ function App() {
   const handleLoadOSM = useCallback(async (params) => {
     setOsmLoading(true);
     setDataSourceMode('osm');
-    
+
     try {
       console.log('Fetching OSM data:', params);
-      
+
       // Call backend API
       const response = await fetch(params.apiEndpoint, {
         method: 'POST',
@@ -717,15 +868,15 @@ function App() {
         },
         body: JSON.stringify(params.apiBody),
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || 'Failed to fetch OSM data');
       }
-      
+
       const data = await response.json();
       console.log('Received OSM data:', data.metadata);
-      
+
       // Convert to graph format
       const nodes = data.nodes.map(n => ({
         id: n.id,
@@ -735,7 +886,7 @@ function App() {
         lat: n.lat,
         lng: n.lng,
       }));
-      
+
       // Store edge geometries for rendering streets
       const edges = data.edges.map(e => ({
         from: e.from,
@@ -745,9 +896,9 @@ function App() {
         highway: e.highway || 'road',
         geometry: e.geometry || null, // Street geometry for drawing
       }));
-      
+
       const newGraph = createGraph(nodes, edges);
-      
+
       // Store edge geometries separately for rendering
       newGraph.edgeGeometries = new Map();
       edges.forEach(e => {
@@ -755,15 +906,15 @@ function App() {
           newGraph.edgeGeometries.set(`${e.from}-${e.to}`, e.geometry);
         }
       });
-      
+
       setGraph(newGraph);
-      
+
       // Set source and target to first and last nodes
       if (nodes.length > 0) {
         setSource(nodes[0].id);
         setTarget(nodes[nodes.length - 1].id);
       }
-      
+
       setIsDirected(true); // OSM has one-way streets
       setShowStreetGrid(params.includeGeometry);
       setHasCityMap(true);
@@ -771,24 +922,24 @@ function App() {
         showStreetGeometry: params.includeGeometry,
         displayMode: params.displayMode,
       });
-      
+
       // Store bounds for map tile rendering
       if (data.metadata?.bounds) {
         setOsmBounds(data.metadata.bounds);
       }
-      
+
       // Set default zoom to 500% for OSM maps
       // Graph will be centered by getGraphOffset in GraphCanvas
       // Pan = {0, 0} means zoom happens around canvas center where graph is centered
       setZoom(5);
       setPan({ x: 0, y: 0 });
-      
+
       setResults([]);
       setCurrentSteps({});
       setProblemInfo(null);
-      
+
       console.log(`Loaded ${nodes.length} nodes, ${edges.length} edges from OSM`);
-      
+
     } catch (error) {
       console.error('Failed to load OSM:', error);
       alert(`Không thể tải dữ liệu OSM: ${error.message}\n\nĐảm bảo backend đang chạy: python backend/server.py`);
@@ -800,7 +951,7 @@ function App() {
   // State-space problem loading handler
   const handleLoadStateProblem = useCallback((graphData) => {
     setDataSourceMode('state-space');
-    
+
     // Apply force layout to state graph for better visualization
     const nodesArray = graphData.nodes.map(n => ({
       id: n.id,
@@ -811,10 +962,10 @@ function App() {
       isGoal: n.isGoal,
       state: n.state,
     }));
-    
+
     // Apply force-directed layout
     const layoutedNodes = applyForceLayout(nodesArray, graphData.edges, 800, 600);
-    
+
     const newGraph = createGraph(layoutedNodes, graphData.edges);
     setGraph(newGraph);
     setSource(graphData.start);
@@ -830,7 +981,7 @@ function App() {
   // Node click handler (set source/target based on selectionMode)
   const handleNodeClick = useCallback((nodeId) => {
     if (editorMode !== 'view') return;
-    
+
     // Only select source/target when in selection mode
     if (selectionMode === 'source') {
       if (nodeId !== target) {
@@ -895,6 +1046,7 @@ function App() {
           <OSMSelector
             onLoadMap={handleLoadOSM}
             isLoading={osmLoading}
+            osmBounds={osmBounds}
           />
         )}
 
@@ -959,7 +1111,7 @@ function App() {
             <span className="incremental-icon">⚡</span>
             <span className="incremental-text">Incremental Mode Active</span>
             <span className="incremental-hint">Click on edges to block/unblock them. Path will recompute automatically.</span>
-            <button 
+            <button
               className="incremental-exit-btn"
               onClick={() => {
                 setIncrementalMode(false);
@@ -1121,24 +1273,51 @@ function App() {
                 Original Weight: <strong>{edgeWeightModal.originalWeight.toFixed(1)}</strong>
               </p>
             )}
-            
+
             <div className="modal-actions">
               {!edgeWeightModal.isBlocked ? (
-                <button 
-                  className="btn btn-danger"
-                  onClick={() => handleApplyEdgeChange('block')}
-                >
-                  🚫 Block Edge
-                </button>
+                // Show different blocking options based on directionality
+                edgeWeightModal.edgeDirection === 'both' ? (
+                  <div className="block-actions">
+                    <button
+                      className="btn btn-danger"
+                      onClick={() => handleApplyEdgeChange('block-both')}
+                      title="Block both directions"
+                    >
+                      🚫 Both
+                    </button>
+                    <button
+                      className="btn btn-warning"
+                      onClick={() => handleApplyEdgeChange('block-forward')}
+                      title={`Block only ${edgeWeightModal.from} → ${edgeWeightModal.to}`}
+                    >
+                      ➡️ Forward
+                    </button>
+                    <button
+                      className="btn btn-warning"
+                      onClick={() => handleApplyEdgeChange('block-reverse')}
+                      title={`Block only ${edgeWeightModal.to} → ${edgeWeightModal.from}`}
+                    >
+                      ⬅️ Reverse
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    className="btn btn-danger"
+                    onClick={() => handleApplyEdgeChange('block')}
+                  >
+                    🚫 Block Edge
+                  </button>
+                )
               ) : (
-                <button 
+                <button
                   className="btn btn-success"
                   onClick={() => handleApplyEdgeChange('unblock')}
                 >
                   ✓ Unblock Edge
                 </button>
               )}
-              
+
               <div className="weight-input-group">
                 <label>New Weight:</label>
                 <input
@@ -1149,7 +1328,7 @@ function App() {
                   id="new-edge-weight"
                   className="weight-input"
                 />
-                <button 
+                <button
                   className="btn btn-primary"
                   onClick={() => {
                     const input = document.getElementById('new-edge-weight');
@@ -1159,9 +1338,9 @@ function App() {
                   Apply
                 </button>
               </div>
-              
+
               {edgeWeightModal.currentWeight !== edgeWeightModal.originalWeight && !edgeWeightModal.isBlocked && (
-                <button 
+                <button
                   className="btn btn-secondary"
                   onClick={() => handleApplyEdgeChange('change', edgeWeightModal.originalWeight)}
                 >
@@ -1169,12 +1348,13 @@ function App() {
                 </button>
               )}
             </div>
-            
+
             <button className="modal-close" onClick={() => setEdgeWeightModal(null)}>×</button>
           </div>
         </div>
-      )}
-    </div>
+      )
+      }
+    </div >
   );
 }
 

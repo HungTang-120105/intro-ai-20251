@@ -77,11 +77,11 @@ class LPAPriorityQueue {
       const right = 2 * index + 2;
       let smallest = index;
       if (left < this.heap.length &&
-          this.compareKeys(this.heap[left].priority, this.heap[smallest].priority) < 0) {
+        this.compareKeys(this.heap[left].priority, this.heap[smallest].priority) < 0) {
         smallest = left;
       }
       if (right < this.heap.length &&
-          this.compareKeys(this.heap[right].priority, this.heap[smallest].priority) < 0) {
+        this.compareKeys(this.heap[right].priority, this.heap[smallest].priority) < 0) {
         smallest = right;
       }
       if (smallest === index) break;
@@ -118,26 +118,26 @@ export class LPAStarState {
     this.isDirected = isDirected;
     this.options = options;
     this.INF = Infinity;
-    
+
     // Extract heuristic strategy
     const heuristicStrategy = options?.heuristicStrategy || 'euclidean';
     this.heuristicStrategy = heuristicStrategy;
-    this.heuristic = createHeuristic(heuristicStrategy, graph, target, 0.01);
-    
+    this.heuristic = createHeuristic(heuristicStrategy, graph, target, 1.0);
+
     // g and rhs values
     this.g = new Map();
     this.rhs = new Map();
-    
+
     // Priority queue
     this.U = new LPAPriorityQueue();
-    
+
     // Parent pointers for path reconstruction
     this.parent = new Map();
-    
+
     // Steps for visualization - MUST be initialized BEFORE initialize()
     this.steps = [];
     this.visitOrder = [];
-    
+
     // Initialize algorithm state
     this.initialize();
   }
@@ -148,11 +148,11 @@ export class LPAStarState {
       this.g.set(nodeId, this.INF);
       this.rhs.set(nodeId, this.INF);
     }
-    
+
     // Source has rhs = 0
     this.rhs.set(this.source, 0);
     this.U.push(this.source, this.calculateKey(this.source));
-    
+
     this.steps.push({
       type: 'init',
       current: null,
@@ -222,14 +222,17 @@ export class LPAStarState {
         }
       }
       this.rhs.set(u, minRhs);
+      // Always update parent - set to bestPred or clear if no valid predecessor
       if (bestPred !== null) {
         this.parent.set(u, bestPred);
+      } else {
+        this.parent.delete(u); // Clear parent if no valid predecessor
       }
     }
-    
+
     // Remove u from queue if present
     this.U.remove(u);
-    
+
     // If inconsistent, add to queue
     if (this.g.get(u) !== this.rhs.get(u)) {
       this.U.push(u, this.calculateKey(u));
@@ -245,21 +248,21 @@ export class LPAStarState {
       if (this.U.isEmpty()) {
         break;
       }
-      
+
       const topKey = this.U.topKey();
       const targetKey = this.calculateKey(this.target);
-      
+
       // Check termination conditions
       const targetConsistent = this.g.get(this.target) === this.rhs.get(this.target);
       const keyCompare = this.U.compareKeys(topKey, targetKey);
-      
+
       if (keyCompare >= 0 && targetConsistent) {
         break;
       }
 
       iterations++;
       const { item: u } = this.U.pop();
-      
+
       if (!this.visitOrder.includes(u)) {
         this.visitOrder.push(u);
       }
@@ -270,7 +273,7 @@ export class LPAStarState {
       if (gU > rhsU) {
         // Locally overconsistent
         this.g.set(u, rhsU);
-        
+
         this.steps.push({
           type: 'expand',
           current: u,
@@ -288,7 +291,7 @@ export class LPAStarState {
       } else {
         // Locally underconsistent
         this.g.set(u, this.INF);
-        
+
         // Update u and all successors
         this.updateVertex(u);
         for (const { node: s } of this.getSuccessors(u)) {
@@ -309,20 +312,35 @@ export class LPAStarState {
       }
     }
 
-    // Use parent pointers first
+    // Use parent pointers first, but validate no blocked edges
     const path = [];
     let current = this.target;
     const maxSteps = this.graph.nodes.size + 5;
     let steps = 0;
+    let pathValid = true;
 
     while (current && steps < maxSteps) {
       steps++;
       path.unshift(current);
       if (current === this.source) break;
-      current = this.parent.get(current);
+
+      const parent = this.parent.get(current);
+      if (!parent) {
+        pathValid = false;
+        break;
+      }
+
+      // Check if edge from parent to current is blocked
+      const edgeCost = this.getCost(parent, current);
+      if (!isFinite(edgeCost)) {
+        pathValid = false;
+        break;
+      }
+
+      current = parent;
     }
 
-    if (path[0] === this.source && path[path.length - 1] === this.target) {
+    if (pathValid && path[0] === this.source && path[path.length - 1] === this.target) {
       return path;
     }
 
@@ -334,10 +352,10 @@ export class LPAStarState {
 
     while (current !== this.target && steps < maxSteps) {
       steps++;
-      
+
       let bestNext = null;
       let bestScore = this.INF;
-      
+
       for (const { node: s, weight } of this.getSuccessors(current)) {
         if (visited.has(s)) continue;
         const gS = this.g.get(s);
@@ -393,12 +411,12 @@ export class LPAStarState {
       (e.from === from && e.to === to) ||
       (!this.isDirected && e.from === to && e.to === from)
     );
-    
+
     if (!edge) return;
 
     const oldWeight = edge.weight;
     const wasBlocked = edge.blocked || false;
-    
+
     // Update the edge
     edge.weight = newWeight;
     edge.blocked = isBlocked;
@@ -413,14 +431,86 @@ export class LPAStarState {
       isBlocked,
       visited: [...this.visitOrder],
       frontier: this.U.toArray(),
-      message: isBlocked 
-        ? `Edge ${from}-${to} blocked!` 
+      message: isBlocked
+        ? `Edge ${from}-${to} blocked!`
         : `Edge ${from}-${to} weight changed: ${oldWeight.toFixed(1)} → ${newWeight.toFixed(1)}`,
     });
 
-    // Update affected vertices (the endpoints of the changed edge)
-    this.updateVertex(from);
-    this.updateVertex(to);
+    // When edge cost increases or edge is blocked, we need to propagate the change
+    // through all affected nodes. The key insight is that nodes that were using
+    // this edge need to find alternative paths.
+
+    // Collect all nodes that might be affected
+    const affectedNodes = new Set();
+
+    // Both endpoints are affected
+    affectedNodes.add(from);
+    affectedNodes.add(to);
+
+    // If the edge is blocked, we need to invalidate ALL nodes downstream from the blocked edge
+    // This means all nodes whose path to source went through this edge
+    if (isBlocked) {
+      // BFS to find all nodes that depend on the blocked edge
+      // Start from 'to' (the node that was reached via 'from')
+      const queue = [to];
+      const invalidated = new Set([to]);
+
+      while (queue.length > 0) {
+        const node = queue.shift();
+        affectedNodes.add(node);
+
+        // Force this node to be inconsistent
+        this.g.set(node, this.INF);
+        this.parent.delete(node); // Clear invalid parent pointer
+
+        // Find all nodes that have this node as their parent (downstream nodes)
+        for (const [childNode, parentNode] of this.parent.entries()) {
+          if (parentNode === node && !invalidated.has(childNode)) {
+            invalidated.add(childNode);
+            queue.push(childNode);
+          }
+        }
+      }
+
+      // Also check if 'from' node's path is affected (for undirected graphs)
+      if (!this.isDirected) {
+        // Check if from's parent was 'to'
+        if (this.parent.get(from) === to) {
+          const queue2 = [from];
+          const invalidated2 = new Set([from]);
+
+          while (queue2.length > 0) {
+            const node = queue2.shift();
+            affectedNodes.add(node);
+            this.g.set(node, this.INF);
+            this.parent.delete(node);
+
+            for (const [childNode, parentNode] of this.parent.entries()) {
+              if (parentNode === node && !invalidated2.has(childNode)) {
+                invalidated2.add(childNode);
+                queue2.push(childNode);
+              }
+            }
+          }
+        }
+      }
+
+      console.log(`[LPA*] Blocked edge ${from}-${to}, invalidated ${affectedNodes.size} nodes:`, [...affectedNodes]);
+    }
+
+    // Update all affected nodes - this will recalculate rhs and add to queue if inconsistent
+    for (const node of affectedNodes) {
+      this.updateVertex(node);
+    }
+
+    // Also update neighbors of affected nodes to propagate changes
+    for (const node of affectedNodes) {
+      for (const { node: s } of this.getSuccessors(node)) {
+        if (!affectedNodes.has(s)) {
+          this.updateVertex(s);
+        }
+      }
+    }
   }
 
   // Run initial computation
@@ -451,7 +541,7 @@ export class LPAStarState {
       };
     } else {
       console.log(`LPA* no path: g(source)=${this.g.get(this.source)}, g(target)=${this.g.get(this.target)}, visited=${this.visitOrder.length}`);
-      
+
       this.steps.push({
         type: 'nopath',
         current: null,
@@ -475,16 +565,26 @@ export class LPAStarState {
 
   // Replan after edge changes - incremental update!
   replan() {
+    // Debug: show queue state before replan
+    console.log(`[LPA*] replan() called. Queue size: ${this.U.toArray().length}`);
+    console.log(`[LPA*] Queue contents:`, this.U.toArray().slice(0, 10));
+    console.log(`[LPA*] g(target)=${this.g.get(this.target)}, rhs(target)=${this.rhs.get(this.target)}`);
+    console.log(`[LPA*] g(source)=${this.g.get(this.source)}, rhs(source)=${this.rhs.get(this.source)}`);
+
+    // Clear the path while replanning (don't show old path during replan)
     this.steps.push({
       type: 'replan_start',
       visited: [...this.visitOrder],
       frontier: this.U.toArray(),
+      path: [], // Empty path - don't show old path during replan
       message: `LPA* replanning after graph change...`,
     });
 
     const iterations = this.computeShortestPath();
     const path = this.extractPath();
     const cost = this.calculatePathCost(path);
+
+    console.log(`[LPA*] replan done. Iterations: ${iterations}, path: ${path ? path.join('->') : 'null'}`);
 
     if (path) {
       this.steps.push({

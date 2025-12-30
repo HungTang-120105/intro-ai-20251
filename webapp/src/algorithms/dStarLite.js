@@ -78,11 +78,11 @@ class DStarPriorityQueue {
       const right = 2 * index + 2;
       let smallest = index;
       if (left < this.heap.length &&
-          this.compareKeys(this.heap[left].priority, this.heap[smallest].priority) < 0) {
+        this.compareKeys(this.heap[left].priority, this.heap[smallest].priority) < 0) {
         smallest = left;
       }
       if (right < this.heap.length &&
-          this.compareKeys(this.heap[right].priority, this.heap[smallest].priority) < 0) {
+        this.compareKeys(this.heap[right].priority, this.heap[smallest].priority) < 0) {
         smallest = right;
       }
       if (smallest === index) break;
@@ -120,28 +120,28 @@ export class DStarLiteState {
     this.isDirected = isDirected;
     this.options = options;
     this.INF = Infinity;
-    
+
     // D* Lite searches backwards from goal to start
     this.km = 0; // Key modifier for heuristic updates
-    
+
     // Extract heuristic strategy
     const heuristicStrategy = options?.heuristicStrategy || 'euclidean';
     this.heuristicStrategy = heuristicStrategy;
-    
-    // Heuristic from current robot position
-    this.heuristic = createHeuristic(heuristicStrategy, graph, source, 0.01);
-    
+
+    // Heuristic from current robot position - Use weight 1.0 for standard A* behavior
+    this.heuristic = createHeuristic(heuristicStrategy, graph, source, 1.0);
+
     // g and rhs values
     this.g = new Map();
     this.rhs = new Map();
-    
+
     // Priority queue
     this.U = new DStarPriorityQueue();
-    
+
     // Steps for visualization - MUST be initialized BEFORE initialize()
     this.steps = [];
     this.visitOrder = [];
-    
+
     // Initialize algorithm state
     this.initialize();
   }
@@ -152,11 +152,11 @@ export class DStarLiteState {
       this.g.set(nodeId, this.INF);
       this.rhs.set(nodeId, this.INF);
     }
-    
+
     // Goal has rhs = 0 (we search backwards)
     this.rhs.set(this.target, 0);
     this.U.push(this.target, this.calculateKey(this.target));
-    
+
     this.steps.push({
       type: 'init',
       current: null,
@@ -225,10 +225,10 @@ export class DStarLiteState {
       }
       this.rhs.set(u, minRhs);
     }
-    
+
     // Remove u from queue if present
     this.U.remove(u);
-    
+
     // If inconsistent, add to queue
     if (this.g.get(u) !== this.rhs.get(u)) {
       this.U.push(u, this.calculateKey(u));
@@ -244,14 +244,14 @@ export class DStarLiteState {
       if (this.U.isEmpty()) {
         break;
       }
-      
+
       const topKey = this.U.topKey();
       const startKey = this.calculateKey(this.source);
-      
+
       // Check termination conditions
       const startConsistent = this.g.get(this.source) === this.rhs.get(this.source);
       const keyCompare = this.U.compareKeys(topKey, startKey);
-      
+
       if (keyCompare >= 0 && startConsistent) {
         break;
       }
@@ -259,7 +259,7 @@ export class DStarLiteState {
       iterations++;
       const kOld = topKey;
       const { item: u } = this.U.pop();
-      
+
       if (!this.visitOrder.includes(u)) {
         this.visitOrder.push(u);
       }
@@ -272,7 +272,7 @@ export class DStarLiteState {
       } else if (this.g.get(u) > this.rhs.get(u)) {
         // Locally overconsistent
         this.g.set(u, this.rhs.get(u));
-        
+
         this.steps.push({
           type: 'expand',
           current: u,
@@ -290,7 +290,7 @@ export class DStarLiteState {
       } else {
         // Locally underconsistent
         this.g.set(u, this.INF);
-        
+
         // Update u and all predecessors
         this.updateVertex(u);
         for (const { node: s } of this.getPredecessors(u)) {
@@ -316,20 +316,20 @@ export class DStarLiteState {
 
     while (current !== this.target && steps < maxSteps) {
       steps++;
-      
+
       // Find best successor - the one that minimizes (edge cost + g(successor))
       // In D* Lite, g values decrease toward the target (g(target) = 0)
       let bestNext = null;
       let bestCost = this.INF;
-      
+
       for (const { node: s, weight } of this.getSuccessors(current)) {
         if (visited.has(s)) continue; // Prevent loops
-        
+
         const gS = this.g.get(s);
         // Even if g(s) is INF, we might need to go through it
         // Priority: finite g first, then by cost
         const cost = weight + (isFinite(gS) ? gS : this.INF);
-        
+
         if (cost < bestCost) {
           bestCost = cost;
           bestNext = s;
@@ -345,7 +345,7 @@ export class DStarLiteState {
           }
         }
       }
-      
+
       // Last resort: try rhs values instead of g values
       if (!bestNext) {
         let bestRhs = this.INF;
@@ -363,7 +363,7 @@ export class DStarLiteState {
       if (!bestNext) {
         break;
       }
-      
+
       path.push(bestNext);
       visited.add(bestNext);
       current = bestNext;
@@ -388,20 +388,16 @@ export class DStarLiteState {
 
   // Handle edge cost change (the key feature of D* Lite!)
   updateEdgeCost(from, to, newWeight, isBlocked = false) {
-    // Update km (key modifier) based on heuristic change
-    // In D* Lite, we would update km when robot moves, but for visualization
-    // we'll handle it on edge changes too
-    
     const edge = this.graph.edges.find(e =>
       (e.from === from && e.to === to) ||
       (!this.isDirected && e.from === to && e.to === from)
     );
-    
+
     if (!edge) return;
 
     const oldWeight = edge.weight;
     const wasBlocked = edge.blocked || false;
-    
+
     // Update the edge
     edge.weight = newWeight;
     edge.blocked = isBlocked;
@@ -416,15 +412,43 @@ export class DStarLiteState {
       isBlocked,
       visited: [...this.visitOrder],
       frontier: this.U.toArray(),
-      message: isBlocked 
-        ? `Edge ${from}-${to} blocked!` 
+      message: isBlocked
+        ? `Edge ${from}-${to} blocked!`
         : `Edge ${from}-${to} weight changed: ${oldWeight.toFixed(1)} → ${newWeight.toFixed(1)}`,
     });
 
-    // Update affected vertices
-    // For undirected graph, both endpoints need update
-    this.updateVertex(from);
-    this.updateVertex(to);
+    // Collect all nodes that might be affected
+    const affectedNodes = new Set();
+    affectedNodes.add(from);
+    affectedNodes.add(to);
+
+    // For blocked edges, we need to invalidate all nodes that might have used this edge
+    // in their path to the target. In D* Lite, we search from target to source,
+    // so nodes that used this edge are "upstream" from the blocked edge (toward source).
+    // D* Lite handles blocked edges naturally via the priority queue propagation.
+    // When edge u->v cost increases (to Infinity), rhs(u) increases.
+    // u is placed in queue. When expanded, g(u) != rhs(u), so it updates predecessors.
+    // Proactive BFS invalidation is not strictly necessary and can be error-prone.
+    // We rely on the endpoints being updated below.
+
+    // Update all affected nodes
+    for (const node of affectedNodes) {
+      this.updateVertex(node);
+    }
+
+    // Propagate to neighbors of affected nodes
+    for (const node of affectedNodes) {
+      for (const { node: s } of this.getSuccessors(node)) {
+        if (!affectedNodes.has(s)) {
+          this.updateVertex(s);
+        }
+      }
+      for (const { node: p } of this.getPredecessors(node)) {
+        if (!affectedNodes.has(p)) {
+          this.updateVertex(p);
+        }
+      }
+    }
   }
 
   // Run the algorithm and return result
@@ -455,7 +479,7 @@ export class DStarLiteState {
       };
     } else {
       console.log(`D* Lite no path: g(source)=${this.g.get(this.source)}, g(target)=${this.g.get(this.target)}, rhs(target)=${this.rhs.get(this.target)}, visited=${this.visitOrder.length}`);
-      
+
       this.steps.push({
         type: 'nopath',
         current: null,
@@ -479,16 +503,25 @@ export class DStarLiteState {
 
   // Replan after edge changes - this is the incremental update!
   replan() {
+    // Debug: show queue state before replan
+    console.log(`[D* Lite] replan() called. Queue size: ${this.U.toArray().length}`);
+    console.log(`[D* Lite] Queue contents:`, this.U.toArray().slice(0, 10));
+    console.log(`[D* Lite] g(source)=${this.g.get(this.source)}, rhs(source)=${this.rhs.get(this.source)}`);
+    console.log(`[D* Lite] g(target)=${this.g.get(this.target)}, rhs(target)=${this.rhs.get(this.target)}`);
+
     this.steps.push({
       type: 'replan_start',
       visited: [...this.visitOrder],
       frontier: this.U.toArray(),
+      path: [], // Empty path - don't show old path during replan
       message: `D* Lite replanning after graph change...`,
     });
 
     const iterations = this.computeShortestPath();
     const path = this.extractPath();
     const cost = this.calculatePathCost(path);
+
+    console.log(`[D* Lite] replan done. Iterations: ${iterations}, path: ${path ? path.slice(0, 5).join('->') + '...' : 'null'}`);
 
     if (path) {
       this.steps.push({

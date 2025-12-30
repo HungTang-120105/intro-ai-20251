@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import './OSMSelector.css';
 
 // Backend API URL
@@ -6,50 +6,50 @@ const API_URL = 'http://localhost:5000/api';
 
 // Predefined locations for easy selection
 const PRESET_LOCATIONS = [
-  { 
-    id: 'hanoi_center', 
+  {
+    id: 'hanoi_center',
     name: 'Hà Nội - Trung tâm',
     query: 'Hoàn Kiếm, Hanoi, Vietnam',
     description: 'Khu vực Hồ Gươm và phố cổ'
   },
-  { 
-    id: 'hanoi_west', 
+  {
+    id: 'hanoi_west',
     name: 'Hà Nội - Cầu Giấy',
     query: 'Cau Giay, Hanoi, Vietnam',
     description: 'Khu vực Dịch Vọng, Trần Duy Hưng'
   },
-  { 
-    id: 'hcm_center', 
+  {
+    id: 'hcm_center',
     name: 'TP.HCM - Quận 1',
     query: 'District 1, Ho Chi Minh City, Vietnam',
     description: 'Khu vực trung tâm Sài Gòn'
   },
-  { 
-    id: 'hcm_tanbinh', 
+  {
+    id: 'hcm_tanbinh',
     name: 'TP.HCM - Tân Bình',
     query: 'Tan Binh, Ho Chi Minh City, Vietnam',
     description: 'Khu vực sân bay Tân Sơn Nhất'
   },
-  { 
-    id: 'danang', 
+  {
+    id: 'danang',
     name: 'Đà Nẵng - Hải Châu',
     query: 'Hai Chau, Da Nang, Vietnam',
     description: 'Trung tâm thành phố Đà Nẵng'
   },
-  { 
-    id: 'manhattan', 
+  {
+    id: 'manhattan',
     name: 'New York - Manhattan',
     query: 'Midtown Manhattan, New York, USA',
     description: 'Trung tâm Manhattan'
   },
-  { 
-    id: 'tokyo_shibuya', 
+  {
+    id: 'tokyo_shibuya',
     name: 'Tokyo - Shibuya',
     query: 'Shibuya, Tokyo, Japan',
     description: 'Khu vực Shibuya nổi tiếng'
   },
-  { 
-    id: 'paris_center', 
+  {
+    id: 'paris_center',
     name: 'Paris - Centre',
     query: 'Le Marais, Paris, France',
     description: 'Trung tâm Paris'
@@ -73,7 +73,7 @@ const DISPLAY_MODES = [
 /**
  * OSMSelector - Component to select and load OpenStreetMap data
  */
-function OSMSelector({ onLoadMap, isLoading = false }) {
+function OSMSelector({ onLoadMap, isLoading = false, osmBounds = null }) {
   const [mode, setMode] = useState('preset'); // 'preset' | 'search' | 'coordinates'
   const [selectedPreset, setSelectedPreset] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -81,8 +81,14 @@ function OSMSelector({ onLoadMap, isLoading = false }) {
   const [distance, setDistance] = useState(500); // meters
   const [coordinates, setCoordinates] = useState({ lat: 21.0285, lng: 105.8542 }); // Hanoi default
   const [displayMode, setDisplayMode] = useState('map'); // 'map' | 'graph' - default to map (show full streets)
+
   const [backendStatus, setBackendStatus] = useState('unknown'); // 'unknown' | 'online' | 'offline'
   const [error, setError] = useState(null);
+
+  // Search suggestions state
+  const [suggestions, setSuggestions] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const searchTimeoutRef = useRef(null);
 
   // Check backend health on mount
   useEffect(() => {
@@ -91,7 +97,7 @@ function OSMSelector({ onLoadMap, isLoading = false }) {
 
   const checkBackendHealth = async () => {
     try {
-      const response = await fetch(`${API_URL}/health`, { 
+      const response = await fetch(`${API_URL}/health`, {
         method: 'GET',
         signal: AbortSignal.timeout(3000)
       });
@@ -105,15 +111,73 @@ function OSMSelector({ onLoadMap, isLoading = false }) {
     }
   };
 
+  // Debounced search for suggestions
+  const fetchSuggestions = useCallback((query) => {
+    if (!query || query.length < 3) {
+      setSuggestions([]);
+      return;
+    }
+
+    setIsSearching(true);
+
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    searchTimeoutRef.current = setTimeout(async () => {
+      try {
+        let url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&addressdetails=1&countrycodes=vn&accept-language=vi`;
+
+        // If we have map bounds, prioritize searching within/near the view
+        if (osmBounds && Array.isArray(osmBounds) && osmBounds.length === 4) {
+          const [minLat, minLon, maxLat, maxLon] = osmBounds;
+          // viewbox=left,top,right,bottom
+          url += `&viewbox=${minLon},${maxLat},${maxLon},${minLat}&bounded=1`;
+        } else {
+          // Fallback: bias around current coordinates (default Hanoi or last selected)
+          // Create a ~50km box around the center
+          const delta = 0.5;
+          const minLat = coordinates.lat - delta;
+          const maxLat = coordinates.lat + delta;
+          const minLon = coordinates.lng - delta;
+          const maxLon = coordinates.lng + delta;
+          url += `&viewbox=${minLon},${maxLat},${maxLon},${minLat}&bounded=1`;
+        }
+
+        const response = await fetch(url);
+        if (response.ok) {
+          const data = await response.json();
+          setSuggestions(data);
+        }
+      } catch (err) {
+        console.error('Error fetching suggestions:', err);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 500);
+  }, []);
+
+  const handleSearchInput = (e) => {
+    const value = e.target.value;
+    setSearchQuery(value);
+    fetchSuggestions(value);
+  };
+
+  const selectSuggestion = (item) => {
+    setSearchQuery(item.display_name);
+    setSuggestions([]);
+    // Optionally auto-trigger load or just fill input
+  };
+
   const handleLoad = useCallback(() => {
     setError(null);
     let query = '';
     let endpoint = '';
     let body = {};
-    
+
     const includeGeometry = displayMode === 'map';
     const simplify = displayMode === 'graph';
-    
+
     if (mode === 'preset') {
       const preset = PRESET_LOCATIONS.find(p => p.id === selectedPreset);
       if (!preset) {
@@ -195,19 +259,19 @@ function OSMSelector({ onLoadMap, isLoading = false }) {
 
       {/* Mode Selection */}
       <div className="osm-mode-tabs">
-        <button 
+        <button
           className={`mode-tab ${mode === 'preset' ? 'active' : ''}`}
           onClick={() => setMode('preset')}
         >
           📍 Có sẵn
         </button>
-        <button 
+        <button
           className={`mode-tab ${mode === 'search' ? 'active' : ''}`}
           onClick={() => setMode('search')}
         >
           🔍 Tìm kiếm
         </button>
-        <button 
+        <button
           className={`mode-tab ${mode === 'coordinates' ? 'active' : ''}`}
           onClick={() => setMode('coordinates')}
         >
@@ -234,13 +298,27 @@ function OSMSelector({ onLoadMap, isLoading = false }) {
       {/* Search Mode */}
       {mode === 'search' && (
         <div className="osm-search">
-          <input
-            type="text"
-            className="input"
-            placeholder="Nhập tên địa điểm (VD: Đống Đa, Hanoi)"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+          <div className="search-input-wrapper">
+            <input
+              type="text"
+              className="input"
+              placeholder="Nhập tên địa điểm (VD: Đống Đa, Hanoi)"
+              value={searchQuery}
+              onChange={handleSearchInput}
+            />
+            {isSearching && <div className="search-spinner"></div>}
+
+            {suggestions.length > 0 && (
+              <ul className="search-suggestions">
+                {suggestions.map((item, index) => (
+                  <li key={index} onClick={() => selectSuggestion(item)}>
+                    <span className="suggestion-icon">📍</span>
+                    <span className="suggestion-text">{item.display_name}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           <p className="osm-hint">Nhập tên quận/huyện, thành phố, hoặc địa chỉ cụ thể</p>
         </div>
       )}
@@ -322,14 +400,14 @@ function OSMSelector({ onLoadMap, isLoading = false }) {
           ))}
         </div>
         <p className="display-hint">
-          {displayMode === 'map' 
-            ? '✨ Hiển thị đường phố chi tiết từ OSM' 
+          {displayMode === 'map'
+            ? '✨ Hiển thị đường phố chi tiết từ OSM'
             : '📊 Chỉ hiển thị các nút giao và kết nối'}
         </p>
       </div>
 
       {/* Load Button */}
-      <button 
+      <button
         className="btn btn-primary btn-block"
         onClick={handleLoad}
         disabled={isLoading || backendStatus === 'offline'}
