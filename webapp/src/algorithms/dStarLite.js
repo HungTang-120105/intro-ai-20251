@@ -1,12 +1,13 @@
-// Lifelong Planning A* (LPA*) implementation
-// An incremental version of A* that can efficiently update when the graph changes
+// D* Lite implementation
+// An incremental heuristic search algorithm for robot navigation
+// Efficiently replans when the graph changes (edges blocked, weights changed)
 
 import { createHeuristic } from '../utils/graphUtils';
 
 /**
- * Priority Queue for LPA* with lexicographic key comparison
+ * Priority Queue for D* Lite with lexicographic key comparison
  */
-class LPAPriorityQueue {
+class DStarPriorityQueue {
   constructor() {
     this.heap = [];
     this.itemMap = new Map();
@@ -92,6 +93,7 @@ class LPAPriorityQueue {
     }
   }
 
+  // Lexicographic comparison: [k1, k2]
   compareKeys(a, b) {
     if (a[0] !== b[0]) return a[0] - b[0];
     return a[1] - b[1];
@@ -108,31 +110,33 @@ class LPAPriorityQueue {
 }
 
 /**
- * LPA* State class - holds algorithm state for incremental updates
+ * D* Lite State class - holds algorithm state for incremental updates
  */
-export class LPAStarState {
+export class DStarLiteState {
   constructor(graph, source, target, isDirected = false, options = {}) {
     this.graph = graph;
-    this.source = source;
-    this.target = target;
+    this.source = source; // Robot's current position (start)
+    this.target = target; // Goal
     this.isDirected = isDirected;
     this.options = options;
     this.INF = Infinity;
     
+    // D* Lite searches backwards from goal to start
+    this.km = 0; // Key modifier for heuristic updates
+    
     // Extract heuristic strategy
     const heuristicStrategy = options?.heuristicStrategy || 'euclidean';
     this.heuristicStrategy = heuristicStrategy;
-    this.heuristic = createHeuristic(heuristicStrategy, graph, target, 0.01);
+    
+    // Heuristic from current robot position
+    this.heuristic = createHeuristic(heuristicStrategy, graph, source, 0.01);
     
     // g and rhs values
     this.g = new Map();
     this.rhs = new Map();
     
     // Priority queue
-    this.U = new LPAPriorityQueue();
-    
-    // Parent pointers for path reconstruction
-    this.parent = new Map();
+    this.U = new DStarPriorityQueue();
     
     // Steps for visualization - MUST be initialized BEFORE initialize()
     this.steps = [];
@@ -149,17 +153,17 @@ export class LPAStarState {
       this.rhs.set(nodeId, this.INF);
     }
     
-    // Source has rhs = 0
-    this.rhs.set(this.source, 0);
-    this.U.push(this.source, this.calculateKey(this.source));
+    // Goal has rhs = 0 (we search backwards)
+    this.rhs.set(this.target, 0);
+    this.U.push(this.target, this.calculateKey(this.target));
     
     this.steps.push({
       type: 'init',
       current: null,
       visited: [],
-      frontier: [this.source],
+      frontier: [this.target],
       heuristicStrategy: this.heuristicStrategy,
-      message: `LPA* initializing: source=${this.source}, target=${this.target} (heuristic: ${this.heuristicStrategy})`,
+      message: `D* Lite initializing: goal=${this.target}, start=${this.source} (heuristic: ${this.heuristicStrategy})`,
     });
   }
 
@@ -168,14 +172,14 @@ export class LPAStarState {
     const rhsS = this.rhs.get(s);
     const minVal = Math.min(gS, rhsS);
     const h = this.heuristic(s);
-    return [minVal + h, minVal];
+    return [minVal + h + this.km, minVal];
   }
 
   // Get successors (nodes we can reach from s)
   getSuccessors(s) {
     const neighbors = [];
     for (const edge of this.graph.edges) {
-      if (edge.blocked) continue;
+      if (edge.blocked) continue; // Skip blocked edges
       if (edge.from === s) {
         neighbors.push({ node: edge.to, weight: edge.weight });
       } else if (!this.isDirected && edge.to === s) {
@@ -189,7 +193,7 @@ export class LPAStarState {
   getPredecessors(s) {
     const preds = [];
     for (const edge of this.graph.edges) {
-      if (edge.blocked) continue;
+      if (edge.blocked) continue; // Skip blocked edges
       if (edge.to === s) {
         preds.push({ node: edge.from, weight: edge.weight });
       } else if (!this.isDirected && edge.from === s) {
@@ -199,7 +203,7 @@ export class LPAStarState {
     return preds;
   }
 
-  // Get edge cost
+  // Get edge cost (returns Infinity if edge doesn't exist or is blocked)
   getCost(from, to) {
     const edge = this.graph.edges.find(e =>
       (e.from === from && e.to === to) ||
@@ -210,21 +214,16 @@ export class LPAStarState {
   }
 
   updateVertex(u) {
-    if (u !== this.source) {
-      // rhs(u) = min over predecessors p of (g(p) + c(p,u))
+    if (u !== this.target) {
+      // rhs(u) = min over successors s of (c(u,s) + g(s))
       let minRhs = this.INF;
-      let bestPred = null;
-      for (const { node: p, weight } of this.getPredecessors(u)) {
-        const val = this.g.get(p) + weight;
+      for (const { node: s, weight } of this.getSuccessors(u)) {
+        const val = weight + this.g.get(s);
         if (val < minRhs) {
           minRhs = val;
-          bestPred = p;
         }
       }
       this.rhs.set(u, minRhs);
-      if (bestPred !== null) {
-        this.parent.set(u, bestPred);
-      }
     }
     
     // Remove u from queue if present
@@ -247,29 +246,32 @@ export class LPAStarState {
       }
       
       const topKey = this.U.topKey();
-      const targetKey = this.calculateKey(this.target);
+      const startKey = this.calculateKey(this.source);
       
       // Check termination conditions
-      const targetConsistent = this.g.get(this.target) === this.rhs.get(this.target);
-      const keyCompare = this.U.compareKeys(topKey, targetKey);
+      const startConsistent = this.g.get(this.source) === this.rhs.get(this.source);
+      const keyCompare = this.U.compareKeys(topKey, startKey);
       
-      if (keyCompare >= 0 && targetConsistent) {
+      if (keyCompare >= 0 && startConsistent) {
         break;
       }
 
       iterations++;
+      const kOld = topKey;
       const { item: u } = this.U.pop();
       
       if (!this.visitOrder.includes(u)) {
         this.visitOrder.push(u);
       }
 
-      const gU = this.g.get(u);
-      const rhsU = this.rhs.get(u);
+      const kNew = this.calculateKey(u);
 
-      if (gU > rhsU) {
+      if (this.U.compareKeys(kOld, kNew) < 0) {
+        // Key has changed, reinsert with new key
+        this.U.push(u, kNew);
+      } else if (this.g.get(u) > this.rhs.get(u)) {
         // Locally overconsistent
-        this.g.set(u, rhsU);
+        this.g.set(u, this.rhs.get(u));
         
         this.steps.push({
           type: 'expand',
@@ -278,20 +280,20 @@ export class LPAStarState {
           frontier: this.U.toArray(),
           gValue: this.g.get(u),
           rhsValue: this.rhs.get(u),
-          message: `LPA* expanding ${u}: g=${this.g.get(u).toFixed(2)}, rhs=${this.rhs.get(u).toFixed(2)}`,
+          message: `D* Lite expanding ${u}: g=${this.g.get(u).toFixed(2)}, rhs=${this.rhs.get(u).toFixed(2)}`,
         });
 
-        // Update all successors
-        for (const { node: s } of this.getSuccessors(u)) {
+        // Update all predecessors
+        for (const { node: s } of this.getPredecessors(u)) {
           this.updateVertex(s);
         }
       } else {
         // Locally underconsistent
         this.g.set(u, this.INF);
         
-        // Update u and all successors
+        // Update u and all predecessors
         this.updateVertex(u);
-        for (const { node: s } of this.getSuccessors(u)) {
+        for (const { node: s } of this.getPredecessors(u)) {
           this.updateVertex(s);
         }
       }
@@ -300,64 +302,60 @@ export class LPAStarState {
     return iterations;
   }
 
-  // Extract path from source to target
+  // Get the current path from source to target
   extractPath() {
-    if (!isFinite(this.g.get(this.target))) {
-      // Try rhs instead
-      if (!isFinite(this.rhs.get(this.target))) {
-        return null;
-      }
+    if (!isFinite(this.g.get(this.source))) {
+      return null;
     }
 
-    // Use parent pointers first
-    const path = [];
-    let current = this.target;
+    const path = [this.source];
+    let current = this.source;
     const maxSteps = this.graph.nodes.size + 5;
     let steps = 0;
-
-    while (current && steps < maxSteps) {
-      steps++;
-      path.unshift(current);
-      if (current === this.source) break;
-      current = this.parent.get(current);
-    }
-
-    if (path[0] === this.source && path[path.length - 1] === this.target) {
-      return path;
-    }
-
-    // Fallback: reconstruct using g-values (greedy from source to target)
-    const altPath = [this.source];
-    current = this.source;
-    steps = 0;
     const visited = new Set([this.source]);
 
     while (current !== this.target && steps < maxSteps) {
       steps++;
       
+      // Find best successor - the one that minimizes (edge cost + g(successor))
+      // In D* Lite, g values decrease toward the target (g(target) = 0)
       let bestNext = null;
-      let bestScore = this.INF;
+      let bestCost = this.INF;
       
       for (const { node: s, weight } of this.getSuccessors(current)) {
-        if (visited.has(s)) continue;
+        if (visited.has(s)) continue; // Prevent loops
+        
         const gS = this.g.get(s);
-        // Pick successor with smallest g (closest to source via this path)
-        // that is on the optimal path (g(s) should equal g(current) + weight for optimal)
-        const expectedG = this.g.get(current) + weight;
-        const score = Math.abs(gS - expectedG) + gS; // Prefer nodes on optimal path
-        if (isFinite(gS) && score < bestScore) {
-          bestScore = score;
+        // Even if g(s) is INF, we might need to go through it
+        // Priority: finite g first, then by cost
+        const cost = weight + (isFinite(gS) ? gS : this.INF);
+        
+        if (cost < bestCost) {
+          bestCost = cost;
           bestNext = s;
         }
       }
 
+      // Fallback: if no good successor found, try any unvisited successor with finite g
       if (!bestNext) {
-        // Fallback: just pick any successor with finite g
         for (const { node: s } of this.getSuccessors(current)) {
-          if (visited.has(s)) continue;
-          if (isFinite(this.g.get(s))) {
+          if (!visited.has(s) && isFinite(this.g.get(s))) {
             bestNext = s;
             break;
+          }
+        }
+      }
+      
+      // Last resort: try rhs values instead of g values
+      if (!bestNext) {
+        let bestRhs = this.INF;
+        for (const { node: s, weight } of this.getSuccessors(current)) {
+          if (visited.has(s)) continue;
+          const rhsS = this.rhs.get(s);
+          const cost = weight + (isFinite(rhsS) ? rhsS : this.INF);
+          if (cost < bestRhs) {
+            bestRhs = cost;
+            bestNext = s;
           }
         }
       }
@@ -365,16 +363,17 @@ export class LPAStarState {
       if (!bestNext) {
         break;
       }
-      altPath.push(bestNext);
+      
+      path.push(bestNext);
       visited.add(bestNext);
       current = bestNext;
     }
 
-    if (altPath[altPath.length - 1] === this.target) {
-      return altPath;
+    if (path[path.length - 1] !== this.target) {
+      return null;
     }
 
-    return null;
+    return path;
   }
 
   // Calculate path cost
@@ -387,8 +386,12 @@ export class LPAStarState {
     return cost;
   }
 
-  // Handle edge cost change - the key feature of LPA*!
+  // Handle edge cost change (the key feature of D* Lite!)
   updateEdgeCost(from, to, newWeight, isBlocked = false) {
+    // Update km (key modifier) based on heuristic change
+    // In D* Lite, we would update km when robot moves, but for visualization
+    // we'll handle it on edge changes too
+    
     const edge = this.graph.edges.find(e =>
       (e.from === from && e.to === to) ||
       (!this.isDirected && e.from === to && e.to === from)
@@ -418,12 +421,13 @@ export class LPAStarState {
         : `Edge ${from}-${to} weight changed: ${oldWeight.toFixed(1)} → ${newWeight.toFixed(1)}`,
     });
 
-    // Update affected vertices (the endpoints of the changed edge)
+    // Update affected vertices
+    // For undirected graph, both endpoints need update
     this.updateVertex(from);
     this.updateVertex(to);
   }
 
-  // Run initial computation
+  // Run the algorithm and return result
   run() {
     const iterations = this.computeShortestPath();
     const path = this.extractPath();
@@ -436,7 +440,7 @@ export class LPAStarState {
         path,
         visited: [...this.visitOrder],
         frontier: [],
-        message: `LPA* found path! Cost: ${cost.toFixed(2)}, ${path.length} nodes`,
+        message: `D* Lite found path! Cost: ${cost.toFixed(2)}, ${path.length} nodes`,
       });
 
       return {
@@ -450,14 +454,14 @@ export class LPAStarState {
         state: this, // Return state for incremental updates
       };
     } else {
-      console.log(`LPA* no path: g(source)=${this.g.get(this.source)}, g(target)=${this.g.get(this.target)}, visited=${this.visitOrder.length}`);
+      console.log(`D* Lite no path: g(source)=${this.g.get(this.source)}, g(target)=${this.g.get(this.target)}, rhs(target)=${this.rhs.get(this.target)}, visited=${this.visitOrder.length}`);
       
       this.steps.push({
         type: 'nopath',
         current: null,
         visited: [...this.visitOrder],
         frontier: [],
-        message: `LPA* could not find path from ${this.source} to ${this.target}`,
+        message: `D* Lite could not find path from ${this.source} to ${this.target}`,
       });
 
       return {
@@ -473,13 +477,13 @@ export class LPAStarState {
     }
   }
 
-  // Replan after edge changes - incremental update!
+  // Replan after edge changes - this is the incremental update!
   replan() {
     this.steps.push({
       type: 'replan_start',
       visited: [...this.visitOrder],
       frontier: this.U.toArray(),
-      message: `LPA* replanning after graph change...`,
+      message: `D* Lite replanning after graph change...`,
     });
 
     const iterations = this.computeShortestPath();
@@ -493,7 +497,7 @@ export class LPAStarState {
         path,
         visited: [...this.visitOrder],
         frontier: [],
-        message: `LPA* replanned! Cost: ${cost.toFixed(2)}, ${path.length} nodes, ${iterations} iterations`,
+        message: `D* Lite replanned! Cost: ${cost.toFixed(2)}, ${path.length} nodes, ${iterations} iterations`,
       });
 
       return {
@@ -512,7 +516,7 @@ export class LPAStarState {
         current: null,
         visited: [...this.visitOrder],
         frontier: [],
-        message: `LPA*: No path available after replanning`,
+        message: `D* Lite: No path available after replanning`,
       });
 
       return {
@@ -530,15 +534,15 @@ export class LPAStarState {
 }
 
 /**
- * LPA* algorithm - main entry point
+ * D* Lite algorithm - main entry point
  * @param {Object} graph - Graph object with nodes and edges
- * @param {string} source - Source node id
- * @param {string} target - Target node id
+ * @param {string} source - Source node id (robot start)
+ * @param {string} target - Target node id (goal)
  * @param {boolean} isDirected - Whether the graph is directed
  * @param {Object} options - Options object
  * @returns {Object} - Result with path, cost, steps, and state for incremental updates
  */
-export function lpaStar(graph, source, target, isDirected = false, options = {}) {
-  const state = new LPAStarState(graph, source, target, isDirected, options);
+export function dStarLite(graph, source, target, isDirected = false, options = {}) {
+  const state = new DStarLiteState(graph, source, target, isDirected, options);
   return state.run();
 }

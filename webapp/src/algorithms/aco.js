@@ -159,7 +159,15 @@ export function aco(graph, source, target, isDirected = false, options = {}) {
       });
     }
 
-    // Iteration step
+    // Convert pheromone map to object for visualization
+    const pheromoneData = {};
+    let maxPheromone = 0;
+    for (const [key, value] of pheromone) {
+      pheromoneData[key] = value;
+      if (value > maxPheromone) maxPheromone = value;
+    }
+
+    // Iteration step - include pheromone data for visualization
     steps.push({
       type: 'iteration',
       current: iterBestPath ? iterBestPath[iterBestPath.length - 1] : null,
@@ -172,6 +180,11 @@ export function aco(graph, source, target, isDirected = false, options = {}) {
       visited: [...allAntsVisited],
       frontier: [],
       path: bestPath,
+      // Pheromone data for visualization
+      pheromone: pheromoneData,
+      maxPheromone,
+      // All successful paths from this iteration
+      antPaths: successfulPaths.map(sp => sp.path),
       message: `Iteration ${iteration + 1}: ${successfulPaths.length}/${numAnts} ants found path. Best: ${bestLength !== Infinity ? bestLength : 'N/A'}`,
     });
 

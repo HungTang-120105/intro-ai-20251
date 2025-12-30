@@ -75,7 +75,7 @@ function StatisticsPanel({ results = [], currentSteps = {} }) {
                     </div>
                   </td>
                   <td className="stat-value time">
-                    {result.executionTime.toFixed(2)}ms
+                    {(result.executionTime ?? 0).toFixed(2)}ms
                   </td>
                 </tr>
               );

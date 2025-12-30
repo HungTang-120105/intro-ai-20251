@@ -82,10 +82,16 @@ function App() {
     depthLimit: 50,
   });
 
-  // Heuristic parameters (for A*, LPA*, Local Beam Search)
+  // Heuristic parameters (for A*, LPA*, Local Beam Search, D* Lite)
   const [heuristicParams, setHeuristicParams] = useState({
     heuristicStrategy: 'euclidean',
   });
+
+  // Incremental algorithms state (LPA*, D* Lite)
+  const [incrementalMode, setIncrementalMode] = useState(false);
+  const [algorithmStates, setAlgorithmStates] = useState({}); // Store algorithm state objects for replanning
+  const [blockedEdges, setBlockedEdges] = useState(new Set()); // Track blocked edges
+  const [edgeWeightModal, setEdgeWeightModal] = useState(null); // { from, to, currentWeight }
 
   // Playback state
   const [isPlaying, setIsPlaying] = useState(false);
@@ -179,7 +185,10 @@ function App() {
   }, [getVisualizationStateForIndex, activeAlgorithmIndex]);
 
   // Algorithms that use heuristics
-  const heuristicAlgorithms = ['astar', 'lpastar', 'local-beam'];
+  const heuristicAlgorithms = ['astar', 'lpastar', 'dstarlite', 'local-beam'];
+  
+  // Algorithms that support incremental replanning
+  const incrementalAlgorithms = ['lpastar', 'dstarlite'];
 
   // Run selected algorithms
   const handleRunAll = useCallback(() => {
@@ -188,6 +197,7 @@ function App() {
     setIsPlaying(false);
     setEditorMode('view');
     setActiveAlgorithmIndex(0); // Reset to first algorithm
+    setBlockedEdges(new Set()); // Clear blocked edges on new run
 
     const newResults = selectedAlgorithms.map(algoId => {
       // Pass params for algorithms that need them
@@ -201,10 +211,41 @@ function App() {
       } else if (heuristicAlgorithms.includes(algoId)) {
         options = heuristicParams;
       }
-      return runAlgorithm(algoId, graph, source, target, isDirected, options);
+      try {
+        return runAlgorithm(algoId, graph, source, target, isDirected, options);
+      } catch (error) {
+        console.error(`Error running algorithm ${algoId}:`, error);
+        // Return an empty result to avoid crashing
+        return {
+          algorithmId: algoId,
+          algorithmName: algoId,
+          path: null,
+          cost: Infinity,
+          found: false,
+          steps: [{
+            type: 'error',
+            message: `Error: ${error.message}`,
+            visited: [],
+            frontier: [],
+          }],
+          visitOrder: [],
+          nodesVisited: 0,
+          edgesExplored: 0,
+          executionTime: 0,
+        };
+      }
     });
 
     setResults(newResults);
+    
+    // Store algorithm states for incremental updates
+    const newAlgorithmStates = {};
+    newResults.forEach(r => {
+      if (r.state && incrementalAlgorithms.includes(r.algorithmId)) {
+        newAlgorithmStates[r.algorithmId] = r.state;
+      }
+    });
+    setAlgorithmStates(newAlgorithmStates);
 
     // Initialize step counters to 0, then auto-play
     const initialSteps = {};
@@ -213,9 +254,136 @@ function App() {
     });
     setCurrentSteps(initialSteps);
     
+    // Enable incremental mode if any incremental algorithm is selected
+    const hasIncrementalAlgo = selectedAlgorithms.some(id => incrementalAlgorithms.includes(id));
+    setIncrementalMode(hasIncrementalAlgo);
+    
     // Auto-start playing after a short delay
     setTimeout(() => setIsPlaying(true), 100);
-  }, [graph, source, target, selectedAlgorithms, isDirected, acoParams, lbsParams, dlsParams, heuristicParams]);
+  }, [graph, source, target, selectedAlgorithms, isDirected, acoParams, lbsParams, dlsParams, heuristicParams, incrementalAlgorithms]);
+
+  // Handle edge click in incremental mode - show modal for weight change
+  const handleEdgeBlock = useCallback((from, to) => {
+    if (!incrementalMode || Object.keys(algorithmStates).length === 0) return;
+    
+    // Find the edge in the graph to get current weight
+    const edge = graph.edges.find(e => 
+      (e.from === from && e.to === to) || 
+      (!isDirected && e.from === to && e.to === from)
+    );
+    
+    if (!edge) return;
+    
+    const edgeKey = `${from}-${to}`;
+    const reverseKey = `${to}-${from}`;
+    const isCurrentlyBlocked = blockedEdges.has(edgeKey) || blockedEdges.has(reverseKey);
+    
+    // Open modal to let user choose action
+    setEdgeWeightModal({
+      from,
+      to,
+      currentWeight: edge.weight,
+      originalWeight: edge.originalWeight || edge.weight,
+      isBlocked: isCurrentlyBlocked,
+    });
+  }, [incrementalMode, algorithmStates, blockedEdges, isDirected, graph]);
+
+  // Apply edge change (block, unblock, or change weight)
+  const handleApplyEdgeChange = useCallback((action, newWeight = null) => {
+    if (!edgeWeightModal) return;
+    
+    const { from, to, originalWeight } = edgeWeightModal;
+    const edgeKey = `${from}-${to}`;
+    const reverseKey = `${to}-${from}`;
+    
+    // Find the edge
+    const edge = graph.edges.find(e => 
+      (e.from === from && e.to === to) || 
+      (!isDirected && e.from === to && e.to === from)
+    );
+    
+    if (!edge) {
+      setEdgeWeightModal(null);
+      return;
+    }
+    
+    // Store original weight if not already stored
+    if (!edge.originalWeight) {
+      edge.originalWeight = edge.weight;
+    }
+    
+    let finalWeight = edge.weight;
+    let isBlocked = false;
+    
+    if (action === 'block') {
+      finalWeight = Infinity;
+      isBlocked = true;
+      setBlockedEdges(prev => {
+        const next = new Set(prev);
+        next.add(edgeKey);
+        if (!isDirected) next.add(reverseKey);
+        return next;
+      });
+    } else if (action === 'unblock') {
+      finalWeight = originalWeight;
+      isBlocked = false;
+      setBlockedEdges(prev => {
+        const next = new Set(prev);
+        next.delete(edgeKey);
+        next.delete(reverseKey);
+        return next;
+      });
+    } else if (action === 'change' && newWeight !== null) {
+      finalWeight = parseFloat(newWeight);
+      if (isNaN(finalWeight) || finalWeight <= 0) {
+        finalWeight = edge.weight; // Keep current if invalid
+      }
+      isBlocked = false;
+      // Remove from blocked if was blocked
+      setBlockedEdges(prev => {
+        const next = new Set(prev);
+        next.delete(edgeKey);
+        next.delete(reverseKey);
+        return next;
+      });
+      // Update edge weight in graph
+      edge.weight = finalWeight;
+    }
+    
+    // Update algorithm states and replan
+    const updatedResults = [];
+    const updatedStates = { ...algorithmStates };
+    
+    for (const [algoId, state] of Object.entries(algorithmStates)) {
+      state.updateEdgeCost(from, to, finalWeight, isBlocked);
+      
+      const startTime = performance.now();
+      const result = state.replan();
+      const endTime = performance.now();
+      
+      result.algorithmId = algoId;
+      result.algorithmName = algoId === 'lpastar' ? 'LPA*' : 'D* Lite';
+      result.executionTime = endTime - startTime;
+      updatedResults.push(result);
+      updatedStates[algoId] = result.state;
+    }
+    
+    const nonIncrementalResults = results.filter(r => !incrementalAlgorithms.includes(r.algorithmId));
+    
+    setResults([...updatedResults, ...nonIncrementalResults]);
+    setAlgorithmStates(updatedStates);
+    
+    const newSteps = {};
+    updatedResults.forEach(r => {
+      newSteps[r.algorithmId] = r.steps.length - 1;
+    });
+    nonIncrementalResults.forEach(r => {
+      newSteps[r.algorithmId] = currentSteps[r.algorithmId] || r.steps.length - 1;
+    });
+    setCurrentSteps(newSteps);
+    
+    setEdgeWeightModal(null);
+  }, [edgeWeightModal, algorithmStates, isDirected, results, currentSteps, incrementalAlgorithms, graph]);
 
   // Jump to end - show final result immediately
   const handleJumpToEnd = useCallback(() => {
@@ -785,6 +953,24 @@ function App() {
 
       {/* Main Canvas Area */}
       <main className="main-canvas" ref={mainCanvasRef}>
+        {/* Incremental mode indicator */}
+        {incrementalMode && (
+          <div className="incremental-mode-banner">
+            <span className="incremental-icon">⚡</span>
+            <span className="incremental-text">Incremental Mode Active</span>
+            <span className="incremental-hint">Click on edges to block/unblock them. Path will recompute automatically.</span>
+            <button 
+              className="incremental-exit-btn"
+              onClick={() => {
+                setIncrementalMode(false);
+                setAlgorithmStates({});
+                setBlockedEdges(new Set());
+              }}
+            >
+              Exit
+            </button>
+          </div>
+        )}
         {/* Show dual view when 2+ algorithms have results */}
         {results.length >= 2 ? (
           <div className="dual-canvas-container">
@@ -806,6 +992,9 @@ function App() {
                 onAddEdge={handleAddEdge}
                 onDeleteNode={handleDeleteNode}
                 onDeleteEdge={handleDeleteEdge}
+                onEdgeBlock={handleEdgeBlock}
+                blockedEdges={blockedEdges}
+                incrementalMode={incrementalMode}
                 showStreetGrid={showStreetGrid}
                 gridInfo={gridInfo}
                 hasCityMap={hasCityMap}
@@ -837,6 +1026,9 @@ function App() {
                 onAddEdge={handleAddEdge}
                 onDeleteNode={handleDeleteNode}
                 onDeleteEdge={handleDeleteEdge}
+                onEdgeBlock={handleEdgeBlock}
+                blockedEdges={blockedEdges}
+                incrementalMode={incrementalMode}
                 showStreetGrid={showStreetGrid}
                 gridInfo={gridInfo}
                 hasCityMap={hasCityMap}
@@ -866,6 +1058,9 @@ function App() {
             onAddEdge={handleAddEdge}
             onDeleteNode={handleDeleteNode}
             onDeleteEdge={handleDeleteEdge}
+            onEdgeBlock={handleEdgeBlock}
+            blockedEdges={blockedEdges}
+            incrementalMode={incrementalMode}
             showStreetGrid={showStreetGrid}
             gridInfo={gridInfo}
             hasCityMap={hasCityMap}
@@ -909,6 +1104,76 @@ function App() {
           currentSteps={currentSteps}
         />
       </aside>
+
+      {/* Edge Weight Change Modal */}
+      {edgeWeightModal && (
+        <div className="modal-overlay" onClick={() => setEdgeWeightModal(null)}>
+          <div className="modal-content edge-weight-modal" onClick={e => e.stopPropagation()}>
+            <h3>Modify Edge</h3>
+            <p className="edge-info">
+              Edge: <strong>{edgeWeightModal.from}</strong> → <strong>{edgeWeightModal.to}</strong>
+            </p>
+            <p className="edge-info">
+              Current Weight: <strong>{edgeWeightModal.isBlocked ? '∞ (Blocked)' : edgeWeightModal.currentWeight.toFixed(1)}</strong>
+            </p>
+            {edgeWeightModal.originalWeight !== edgeWeightModal.currentWeight && (
+              <p className="edge-info original">
+                Original Weight: <strong>{edgeWeightModal.originalWeight.toFixed(1)}</strong>
+              </p>
+            )}
+            
+            <div className="modal-actions">
+              {!edgeWeightModal.isBlocked ? (
+                <button 
+                  className="btn btn-danger"
+                  onClick={() => handleApplyEdgeChange('block')}
+                >
+                  🚫 Block Edge
+                </button>
+              ) : (
+                <button 
+                  className="btn btn-success"
+                  onClick={() => handleApplyEdgeChange('unblock')}
+                >
+                  ✓ Unblock Edge
+                </button>
+              )}
+              
+              <div className="weight-input-group">
+                <label>New Weight:</label>
+                <input
+                  type="number"
+                  min="0.1"
+                  step="0.1"
+                  defaultValue={edgeWeightModal.isBlocked ? edgeWeightModal.originalWeight : edgeWeightModal.currentWeight}
+                  id="new-edge-weight"
+                  className="weight-input"
+                />
+                <button 
+                  className="btn btn-primary"
+                  onClick={() => {
+                    const input = document.getElementById('new-edge-weight');
+                    handleApplyEdgeChange('change', input.value);
+                  }}
+                >
+                  Apply
+                </button>
+              </div>
+              
+              {edgeWeightModal.currentWeight !== edgeWeightModal.originalWeight && !edgeWeightModal.isBlocked && (
+                <button 
+                  className="btn btn-secondary"
+                  onClick={() => handleApplyEdgeChange('change', edgeWeightModal.originalWeight)}
+                >
+                  ↩ Reset to Original
+                </button>
+              )}
+            </div>
+            
+            <button className="modal-close" onClick={() => setEdgeWeightModal(null)}>×</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { bellmanFord } from './bellmanFord';
 import { ucs } from './ucs';
 import { aco } from './aco';
 import { lpaStar } from './lpaStar';
+import { dStarLite } from './dStarLite';
 import { dls } from './dls';
 import { ids } from './ids';
 import { floydWarshall } from './floydWarshall';
@@ -98,6 +99,18 @@ export const algorithms = [
     optimal: 'Yes',
     color: '#ec4899', // Pink
     run: lpaStar,
+    incremental: true, // Supports incremental replanning
+  },
+  {
+    id: 'dstarlite',
+    name: 'D* Lite',
+    fullName: 'D* Lite',
+    description: 'Incremental heuristic search for robot navigation. Efficiently replans when edges change.',
+    complexity: 'O(V² log V) worst',
+    optimal: 'Yes',
+    color: '#f472b6', // Rose
+    run: dStarLite,
+    incremental: true, // Supports incremental replanning
   },
   {
     id: 'bellman-ford',

@@ -3,7 +3,7 @@ import './GraphCanvas.css';
 
 /**
  * GraphCanvas component - Canvas-based graph rendering with visualization support
- * Now supports: node dragging, adding nodes/edges, directed/undirected graphs, street grid, delete mode
+ * Now supports: node dragging, adding nodes/edges, directed/undirected graphs, street grid, delete mode, edge blocking
  */
 function GraphCanvas({
   graph,
@@ -18,6 +18,9 @@ function GraphCanvas({
   onAddEdge = null,
   onDeleteNode = null,
   onDeleteEdge = null,
+  onEdgeBlock = null,
+  blockedEdges = new Set(),
+  incrementalMode = false,
   isDirected = false,
   editorMode = 'view',
   showStreetGrid = false,
@@ -40,6 +43,7 @@ function GraphCanvas({
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+  const [hoveredEdge, setHoveredEdge] = useState(null); // For edge hover in incremental mode
   
   // Map tiles state for OSM tiles
   const [mapTiles, setMapTiles] = useState([]);
@@ -156,6 +160,7 @@ function GraphCanvas({
       visited: '#6366f1',
       path: '#22c55e',
       frontier: '#a855f7',
+      intermediate: '#ec4899', // Pink for Floyd-Warshall intermediate node k
     },
     edge: {
       default: '#475569',
@@ -173,12 +178,37 @@ function GraphCanvas({
     },
   };
 
+  // Beam colors for Local Beam Search (k different colors)
+  const beamColors = [
+    '#f59e0b', // amber
+    '#8b5cf6', // violet
+    '#06b6d4', // cyan
+    '#ec4899', // pink
+    '#10b981', // emerald
+    '#f97316', // orange
+    '#6366f1', // indigo
+    '#14b8a6', // teal
+  ];
+
   // Get node state for coloring
   const getNodeState = useCallback((nodeId) => {
     if (!visualizationState) return 'default';
 
     if (visualizationState.path?.includes(nodeId)) return 'path';
     if (visualizationState.current === nodeId) return 'visiting';
+    
+    // Floyd-Warshall: highlight intermediate node k
+    if (visualizationState.intermediateNode === nodeId) return 'intermediate';
+    
+    // Check if node is in beam (for Local Beam Search)
+    const queue = visualizationState.queue || visualizationState.frontier;
+    if (queue && visualizationState.beamIndex !== undefined) {
+      const beamIdx = queue.indexOf(nodeId);
+      if (beamIdx !== -1 && beamIdx < (visualizationState.beamWidth || 3)) {
+        return `beam-${beamIdx}`;
+      }
+    }
+    
     if (visualizationState.frontier?.includes(nodeId)) return 'frontier';
     if (visualizationState.visited?.includes(nodeId)) return 'visited';
 
@@ -213,6 +243,14 @@ function GraphCanvas({
     return (from === current && frontier.includes(to)) || 
            (!isDirected && to === current && frontier.includes(from));
   }, [visualizationState, isDirected]);
+
+  // Check if edge is blocked (for incremental algorithms)
+  const isEdgeBlocked = useCallback((from, to) => {
+    if (!blockedEdges || blockedEdges.size === 0) return false;
+    const key1 = `${from}-${to}`;
+    const key2 = `${to}-${from}`;
+    return blockedEdges.has(key1) || blockedEdges.has(key2);
+  }, [blockedEdges]);
 
   // Draw arrow for directed edges
   const drawArrow = useCallback((ctx, fromX, fromY, toX, toY, color) => {
@@ -672,12 +710,13 @@ function GraphCanvas({
     }
 
     // For OSM: Draw edges in multiple passes for proper layering
+    // Pass 0: Blocked edges (bottom layer - red dashed)
     // Pass 1: Normal edges (bottom layer)
     // Pass 2: Visited edges
     // Pass 3: Exploring edges  
     // Pass 4: Path edges (top layer)
     
-    const drawOSMEdge = (edge, style) => {
+    const drawOSMEdge = (edge, style, isBlocked = false) => {
       const fromNode = graph.nodes.get(edge.from);
       const toNode = graph.nodes.get(edge.to);
       if (!fromNode || !toNode) return;
@@ -687,6 +726,9 @@ function GraphCanvas({
       
       ctx.beginPath();
       
+      if (isBlocked) {
+        ctx.setLineDash([8, 4]);
+      }
       if (geometry && geometry.length > 1) {
         // Draw along street geometry
         ctx.moveTo(geometry[0].x + offsetX, geometry[0].y + offsetY);
@@ -704,16 +746,127 @@ function GraphCanvas({
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       ctx.stroke();
+      ctx.setLineDash([]);
+    };
+
+    // Helper function to draw pheromone trails for ACO
+    const drawPheromoneTrails = () => {
+      if (!visualizationState?.pheromone || !visualizationState?.maxPheromone) return;
+      
+      const { pheromone, maxPheromone } = visualizationState;
+      
+      for (const edge of graph.edges) {
+        // Check both directions for pheromone
+        const key1 = `${edge.from}-${edge.to}`;
+        const key2 = `${edge.to}-${edge.from}`;
+        const pherValue = Math.max(pheromone[key1] || 0, pheromone[key2] || 0);
+        
+        if (pherValue <= 0) continue;
+        
+        // Normalize pheromone to 0-1 range with log scale for better visualization
+        const intensity = Math.min(1, Math.log(1 + pherValue) / Math.log(1 + maxPheromone));
+        
+        if (intensity < 0.1) continue; // Skip very weak trails
+        
+        const fromNode = graph.nodes.get(edge.from);
+        const toNode = graph.nodes.get(edge.to);
+        if (!fromNode || !toNode) continue;
+        
+        // Color from yellow (weak) to orange/red (strong)
+        const r = Math.round(255);
+        const g = Math.round(255 * (1 - intensity * 0.7));
+        const b = Math.round(50 * (1 - intensity));
+        const alpha = 0.3 + intensity * 0.5;
+        
+        const edgeKey = `${edge.from}-${edge.to}`;
+        const geometry = graph.edgeGeometries?.get(edgeKey) || edge.geometry;
+        
+        ctx.beginPath();
+        
+        if (geometry && geometry.length > 1 && isOSMData) {
+          ctx.moveTo(geometry[0].x + offsetX, geometry[0].y + offsetY);
+          for (let i = 1; i < geometry.length; i++) {
+            ctx.lineTo(geometry[i].x + offsetX, geometry[i].y + offsetY);
+          }
+        } else {
+          ctx.moveTo(fromNode.x + offsetX, fromNode.y + offsetY);
+          ctx.lineTo(toNode.x + offsetX, toNode.y + offsetY);
+        }
+        
+        ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        ctx.lineWidth = 2 + intensity * 4; // Thicker for stronger pheromone
+        ctx.lineCap = 'round';
+        ctx.stroke();
+      }
+    };
+
+    // Helper to check if edge is hovered
+    const isEdgeHovered = (from, to) => {
+      if (!hoveredEdge) return false;
+      return (hoveredEdge.from === from && hoveredEdge.to === to) ||
+             (hoveredEdge.from === to && hoveredEdge.to === from);
+    };
+
+    // Helper to draw hovered edge highlight
+    const drawHoveredEdgeHighlight = () => {
+      if (!hoveredEdge || !incrementalMode) return;
+      
+      const edge = graph.edges.find(e =>
+        (e.from === hoveredEdge.from && e.to === hoveredEdge.to) ||
+        (!isDirected && e.from === hoveredEdge.to && e.to === hoveredEdge.from)
+      );
+      if (!edge) return;
+      
+      const fromNode = graph.nodes.get(edge.from);
+      const toNode = graph.nodes.get(edge.to);
+      if (!fromNode || !toNode) return;
+      
+      const edgeKey = `${edge.from}-${edge.to}`;
+      const geometry = graph.edgeGeometries?.get(edgeKey) || edge.geometry;
+      
+      ctx.beginPath();
+      
+      if (geometry && geometry.length > 1 && isOSMData) {
+        ctx.moveTo(geometry[0].x + offsetX, geometry[0].y + offsetY);
+        for (let i = 1; i < geometry.length; i++) {
+          ctx.lineTo(geometry[i].x + offsetX, geometry[i].y + offsetY);
+        }
+      } else {
+        ctx.moveTo(fromNode.x + offsetX, fromNode.y + offsetY);
+        ctx.lineTo(toNode.x + offsetX, toNode.y + offsetY);
+      }
+      
+      // Cyan highlight for hovered edge
+      ctx.strokeStyle = '#00d9ff';
+      ctx.lineWidth = isOSMData ? 4 : 6;
+      ctx.lineCap = 'round';
+      ctx.shadowColor = '#00d9ff';
+      ctx.shadowBlur = 8;
+      ctx.stroke();
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
     };
 
     if (isOSMData) {
+      // Draw pheromone trails for ACO (below normal edges)
+      drawPheromoneTrails();
+      
+      // Pass 0: Blocked edges - red dashed
+      for (const edge of graph.edges) {
+        const blocked = isEdgeBlocked(edge.from, edge.to);
+        if (blocked) {
+          drawOSMEdge(edge, { color: '#ef4444', width: 3 }, true);
+        }
+      }
+      
       // Pass 1: Normal edges - thin but visible
       for (const edge of graph.edges) {
         const inPath = isEdgeInPath(edge.from, edge.to);
         const edgeVisited = isEdgeVisited(edge.from, edge.to);
         const edgeExploring = isEdgeExploring(edge.from, edge.to);
+        const blocked = isEdgeBlocked(edge.from, edge.to);
         
-        if (!inPath && !edgeVisited && !edgeExploring) {
+        if (!inPath && !edgeVisited && !edgeExploring && !blocked) {
           drawOSMEdge(edge, { 
             color: hasTiles ? 'rgba(71, 85, 105, 0.7)' : 'rgba(100, 116, 139, 0.8)', 
             width: 1.5 
@@ -726,8 +879,9 @@ function GraphCanvas({
         const inPath = isEdgeInPath(edge.from, edge.to);
         const edgeVisited = isEdgeVisited(edge.from, edge.to);
         const edgeExploring = isEdgeExploring(edge.from, edge.to);
+        const blocked = isEdgeBlocked(edge.from, edge.to);
         
-        if (edgeVisited && !inPath && !edgeExploring) {
+        if (edgeVisited && !inPath && !edgeExploring && !blocked) {
           drawOSMEdge(edge, { color: 'rgba(134, 239, 172, 0.7)', width: 2 });
         }
       }
@@ -736,8 +890,9 @@ function GraphCanvas({
       for (const edge of graph.edges) {
         const inPath = isEdgeInPath(edge.from, edge.to);
         const edgeExploring = isEdgeExploring(edge.from, edge.to);
+        const blocked = isEdgeBlocked(edge.from, edge.to);
         
-        if (edgeExploring && !inPath) {
+        if (edgeExploring && !inPath && !blocked) {
           drawOSMEdge(edge, { color: '#fb923c', width: 2.5 });
         }
       }
@@ -745,8 +900,9 @@ function GraphCanvas({
       // Pass 4: Path edges (final result) - thicker
       for (const edge of graph.edges) {
         const inPath = isEdgeInPath(edge.from, edge.to);
+        const blocked = isEdgeBlocked(edge.from, edge.to);
         
-        if (inPath) {
+        if (inPath && !blocked) {
           drawOSMEdge(edge, { color: '#22c55e', width: 3.5 });
         }
       }
@@ -754,6 +910,9 @@ function GraphCanvas({
 
     // Draw edges for non-OSM graphs
     if (!isOSMData) {
+      // Draw pheromone trails for ACO first (below normal edges)
+      drawPheromoneTrails();
+      
       for (const edge of graph.edges) {
         const fromNode = graph.nodes.get(edge.from);
         const toNode = graph.nodes.get(edge.to);
@@ -765,26 +924,51 @@ function GraphCanvas({
         const toY = toNode.y + offsetY;
 
         const inPath = isEdgeInPath(edge.from, edge.to);
-        const edgeColor = inPath ? colors.edge.path : colors.edge.default;
+        const blocked = isEdgeBlocked(edge.from, edge.to);
 
         ctx.beginPath();
         ctx.moveTo(fromX, fromY);
         ctx.lineTo(toX, toY);
         
-        if (inPath) {
+        if (blocked) {
+          // Blocked edge - red dashed line
+          ctx.strokeStyle = '#ef4444';
+          ctx.lineWidth = 3;
+          ctx.setLineDash([8, 4]);
+        } else if (inPath) {
           ctx.strokeStyle = colors.edge.path;
           ctx.lineWidth = 5;
           ctx.shadowColor = colors.edge.path;
           ctx.shadowBlur = 6;
+          ctx.setLineDash([]);
         } else {
           ctx.strokeStyle = colors.edge.default;
           ctx.lineWidth = 3;
+          ctx.setLineDash([]);
         }
         ctx.stroke();
+        ctx.setLineDash([]);
         ctx.shadowColor = 'transparent';
         ctx.shadowBlur = 0;
 
-        if (isDirected) {
+        // Draw X marker for blocked edges
+        if (blocked) {
+          const midX = (fromX + toX) / 2;
+          const midY = (fromY + toY) / 2;
+          const markerSize = 8;
+          
+          ctx.beginPath();
+          ctx.moveTo(midX - markerSize, midY - markerSize);
+          ctx.lineTo(midX + markerSize, midY + markerSize);
+          ctx.moveTo(midX + markerSize, midY - markerSize);
+          ctx.lineTo(midX - markerSize, midY + markerSize);
+          ctx.strokeStyle = '#ef4444';
+          ctx.lineWidth = 3;
+          ctx.stroke();
+        }
+
+        if (isDirected && !blocked) {
+          const edgeColor = inPath ? colors.edge.path : colors.edge.default;
           drawArrow(ctx, fromX, fromY, toX, toY, edgeColor);
         }
       }
@@ -802,6 +986,10 @@ function GraphCanvas({
         const toX = toNode.x + offsetX;
         const toY = toNode.y + offsetY;
         const inPath = isEdgeInPath(edge.from, edge.to);
+        const blocked = isEdgeBlocked(edge.from, edge.to);
+
+        // Skip weight label for blocked edges (X marker is shown instead)
+        if (blocked) continue;
 
         const midX = (fromX + toX) / 2;
         const midY = (fromY + toY) / 2;
@@ -830,6 +1018,9 @@ function GraphCanvas({
       }
     }
 
+    // Draw hovered edge highlight (for incremental mode)
+    drawHoveredEdgeHighlight();
+
     // Draw edge being created
     if (edgeStart && mousePos) {
       const startNode = graph.nodes.get(edgeStart);
@@ -855,8 +1046,18 @@ function GraphCanvas({
       if (id === source) state = 'start';
       else if (id === target) state = 'end';
 
-      const color = colors.node[state] || colors.node.default;
-      const isSpecial = ['visiting', 'path', 'start', 'end', 'frontier'].includes(state);
+      // Handle beam states for Local Beam Search
+      let color;
+      let isBeamNode = false;
+      if (state.startsWith('beam-')) {
+        const beamIdx = parseInt(state.split('-')[1], 10);
+        color = beamColors[beamIdx % beamColors.length];
+        isBeamNode = true;
+      } else {
+        color = colors.node[state] || colors.node.default;
+      }
+      
+      const isSpecial = ['visiting', 'path', 'start', 'end', 'frontier', 'intermediate'].includes(state) || isBeamNode;
       
       // Apply offset
       const nodeX = node.x + offsetX;
@@ -947,7 +1148,7 @@ function GraphCanvas({
 
     ctx.restore(); // Restore zoom/pan transform
     ctx.restore(); // Restore dpr scale
-  }, [graph, visualizationState, source, target, getNodeState, isEdgeInPath, isEdgeVisited, isEdgeExploring, isDirected, drawArrow, drawStreetGrid, drawCityMapBackground, getGraphOffset, colors, isDragging, dragNode, edgeStart, mousePos, zoom, pan, width, height, mapTiles, osmBounds, tileInfo]);
+  }, [graph, visualizationState, source, target, getNodeState, isEdgeInPath, isEdgeVisited, isEdgeExploring, isEdgeBlocked, isDirected, drawArrow, drawStreetGrid, drawCityMapBackground, getGraphOffset, colors, isDragging, dragNode, edgeStart, mousePos, zoom, pan, width, height, mapTiles, osmBounds, tileInfo, blockedEdges]);
 
   // Canvas resize and setup
   useEffect(() => {
@@ -1014,7 +1215,13 @@ function GraphCanvas({
     if (!graph) return null;
     const { offsetX, offsetY } = getGraphOffset();
     const { x, y } = screenToGraph(screenX, screenY);
-    const threshold = 10 / zoom; // Distance threshold for edge detection, adjusted for zoom
+    
+    // Fixed threshold in graph coordinates - 20px at zoom 1
+    // Scale inversely with zoom to keep consistent screen-space hit area
+    const threshold = 20 / zoom;
+    
+    let closestEdge = null;
+    let closestDist = threshold;
 
     for (const edge of graph.edges) {
       const fromNode = graph.nodes.get(edge.from);
@@ -1050,11 +1257,14 @@ function GraphCanvas({
       }
 
       const dist = Math.sqrt((x - xx) * (x - xx) + (y - yy) * (y - yy));
-      if (dist < threshold) {
-        return { from: edge.from, to: edge.to };
+      
+      // Keep track of closest edge within threshold
+      if (dist < closestDist) {
+        closestDist = dist;
+        closestEdge = { from: edge.from, to: edge.to };
       }
     }
-    return null;
+    return closestEdge;
   }, [graph, getGraphOffset, screenToGraph, zoom]);
 
   // Mouse event handlers
@@ -1099,7 +1309,15 @@ function GraphCanvas({
       // Convert screen to graph coordinates, then subtract offset
       onNodeDrag(dragNode, graphCoords.x - offsetX, graphCoords.y - offsetY);
     }
-  }, [isDragging, dragNode, onNodeDrag, getGraphOffset, screenToGraph, isPanning, panStart, onPanChange]);
+    
+    // Track hovered edge in incremental mode for visual feedback
+    if (incrementalMode && !isDragging && !isPanning) {
+      const edge = getEdgeAt(screenX, screenY);
+      setHoveredEdge(edge);
+    } else {
+      setHoveredEdge(null);
+    }
+  }, [isDragging, dragNode, onNodeDrag, getGraphOffset, screenToGraph, isPanning, panStart, onPanChange, incrementalMode, getEdgeAt]);
 
   const handleMouseUp = useCallback((e) => {
     const rect = canvasRef.current.getBoundingClientRect();
@@ -1144,12 +1362,21 @@ function GraphCanvas({
       return;
     }
 
+    // Incremental mode - block/unblock edges on click
+    if (incrementalMode && !nodeId) {
+      const edge = getEdgeAt(x, y);
+      if (edge && onEdgeBlock) {
+        onEdgeBlock(edge.from, edge.to);
+        return;
+      }
+    }
+
     if (nodeId) {
       if (onNodeClick) onNodeClick(nodeId);
     } else {
       if (onCanvasClick) onCanvasClick(x, y);
     }
-  }, [graph, isDragging, getNodeAt, getEdgeAt, onNodeClick, onCanvasClick, editorMode, onDeleteNode, onDeleteEdge]);
+  }, [graph, isDragging, getNodeAt, getEdgeAt, onNodeClick, onCanvasClick, editorMode, onDeleteNode, onDeleteEdge, incrementalMode, onEdgeBlock]);
 
   // Double-click to delete (works in all modes)
   const handleDoubleClick = useCallback((e) => {
@@ -1226,6 +1453,8 @@ function GraphCanvas({
     if (editorMode === 'addNode') return 'cell';
     if (editorMode === 'addEdge') return 'crosshair';
     if (editorMode === 'delete') return 'not-allowed';
+    if (incrementalMode && hoveredEdge) return 'pointer';
+    if (incrementalMode) return 'default';
     return 'grab';
   };
 
@@ -1244,7 +1473,9 @@ function GraphCanvas({
       />
       {visualizationState?.message && (
         <div className="canvas-message">
-          {visualizationState.message}
+          {visualizationState.message.length > 100 
+            ? visualizationState.message.substring(0, 100) + '...' 
+            : visualizationState.message}
         </div>
       )}
       {/* OSM Info badge */}
