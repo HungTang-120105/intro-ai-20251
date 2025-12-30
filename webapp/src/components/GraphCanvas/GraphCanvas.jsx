@@ -45,6 +45,7 @@ function GraphCanvas({
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [hoveredEdge, setHoveredEdge] = useState(null); // For edge hover
   const [hoveredNode, setHoveredNode] = useState(null); // For node hover
+  const [tooltip, setTooltip] = useState(null); // { text, x, y }
 
   // Map tiles state for OSM tiles
   const [mapTiles, setMapTiles] = useState([]);
@@ -1382,18 +1383,40 @@ function GraphCanvas({
     // Track hovered node and edge for visual feedback
     if (!isDragging && !isPanning) {
       const nodeId = getNodeAt(screenX, screenY);
-      setHoveredNode(nodeId);
+
+      if (hoveredNode !== nodeId) {
+        setHoveredNode(nodeId);
+        if (nodeId) {
+          const node = graph.nodes.get(nodeId);
+          const label = node.label || node.id;
+          setTooltip({
+            text: label,
+            x: screenX + 10,
+            y: screenY + 10,
+          });
+          document.body.style.cursor = 'pointer';
+        } else {
+          setTooltip(null);
+          document.body.style.cursor = 'default';
+        }
+      }
 
       // Only check edge if no node is hovered
       if (!nodeId) {
         const edge = getEdgeAt(screenX, screenY);
         setHoveredEdge(edge);
+        if (edge) {
+          document.body.style.cursor = 'pointer';
+        } else {
+          document.body.style.cursor = 'default';
+        }
       } else {
         setHoveredEdge(null);
       }
     } else {
       setHoveredNode(null);
       setHoveredEdge(null);
+      setTooltip(null);
     }
   }, [isDragging, dragNode, onNodeDrag, getGraphOffset, screenToGraph, isPanning, panStart, onPanChange, getNodeAt, getEdgeAt]);
 
@@ -1605,6 +1628,28 @@ function GraphCanvas({
       )}
       {(showStreetGrid || hasCityMap) && !osmBounds && (
         <div className="graph-type-badge city-map">🗺️ City Map</div>
+      )}
+
+      {/* Node Tooltip */}
+      {tooltip && (
+        <div
+          className="canvas-tooltip"
+          style={{
+            position: 'absolute',
+            left: tooltip.x,
+            top: tooltip.y,
+            background: 'rgba(0, 0, 0, 0.8)',
+            color: 'white',
+            padding: '4px 8px',
+            borderRadius: '4px',
+            fontSize: '12px',
+            pointerEvents: 'none',
+            zIndex: 1000,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {tooltip.text}
+        </div>
       )}
     </div>
   );

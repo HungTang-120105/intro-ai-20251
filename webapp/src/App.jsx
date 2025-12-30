@@ -279,6 +279,12 @@ function App() {
     const reverseKey = `${to}-${from}`;
     const isCurrentlyBlocked = blockedEdges.has(edgeKey) || blockedEdges.has(reverseKey);
 
+    // Detect if this is a bidirectional edge (undirected OR directed but has a reverse edge)
+    // OSM graphs are directed but effectively bidirectional for most roads (represented as two edges)
+    // We want to offer 'Block Both' if there is a reverse edge.
+    const hasReverseEdge = graph.edges.some(e => e.from === to && e.to === from);
+    const edgeDirection = (!isDirected || hasReverseEdge) ? 'both' : 'forward';
+
     // Open modal to let user choose action
     setEdgeWeightModal({
       from,
@@ -286,7 +292,7 @@ function App() {
       currentWeight: edge.weight,
       originalWeight: edge.originalWeight || edge.weight,
       isBlocked: isCurrentlyBlocked,
-      edgeDirection: !isDirected ? 'both' : 'forward', // Detect if undirected/bidirectional
+      edgeDirection,
     });
   }, [incrementalMode, algorithmStates, blockedEdges, isDirected, graph]);
 
